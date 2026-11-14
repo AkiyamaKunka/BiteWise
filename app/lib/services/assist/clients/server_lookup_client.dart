@@ -38,6 +38,13 @@
 /// is read ONCE per call, so the gate, the consent stamp and the URL all
 /// describe the same server.
 ///
+/// While the https switch is on (core/server_transport.dart, owner
+/// decision 2026-11-13) an address that is not https:// gets nothing at
+/// all: lookups are unsupported there ([LookupUnsupportedReason
+/// .noServerAddress] — no usable address), so submit and poll send no
+/// request and no upload key. The brand-only http path above is what the
+/// switch turned off brings back.
+///
 /// The server's own request gate is stricter about coordinate-shaped text
 /// than the composer (LookupRequestForClients.withoutGateCoordinates), so
 /// a name or unit it would refuse is sent as "" instead of earning a 400.
@@ -55,6 +62,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:http/http.dart' as http;
 
+import '../../../core/server_transport.dart' show serverAddressRefused;
 import '../../settings/app_settings.dart';
 import 'http_lookup_client.dart' show LookupAbort, countOf, dedupe, redactRaw;
 import 'lookup_client.dart';
@@ -136,7 +144,9 @@ class ServerLookupClient implements LookupClient {
         server: null,
       );
     }
-    final server = _Server.parse(_settings.serverBaseUrl);
+    final base = _settings.serverBaseUrl;
+    // Not https:// with the switch on: no usable address, nothing sent.
+    final server = serverAddressRefused(base) ? null : _Server.parse(base);
     if (server == null) {
       return (
         support: const LookupSupport.unsupported(

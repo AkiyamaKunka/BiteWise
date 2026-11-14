@@ -56,7 +56,7 @@ void main() {
         final s = await AppSettings.load(
             prefs: await SharedPreferences.getInstance(), keyStore: _MemKeys());
         await s.setProvider(AiProvider.server);
-        await s.setServerBaseUrl('http://10.0.0.5');
+        await s.setServerBaseUrl('https://10.0.0.5');
         await s.setServerApiKey('k');
         final analyzer = ServerAnalyzer(s,
             normalizer: (b) async => b,
@@ -81,7 +81,7 @@ void main() {
       final s = await AppSettings.load(
           prefs: await SharedPreferences.getInstance(), keyStore: _MemKeys());
       await s.setProvider(AiProvider.server);
-      await s.setServerBaseUrl('http://10.0.0.5');
+      await s.setServerBaseUrl('https://10.0.0.5');
       await s.setServerApiKey('k');
       final analyzer = ServerAnalyzer(s,
           normalizer: (b) async => b,

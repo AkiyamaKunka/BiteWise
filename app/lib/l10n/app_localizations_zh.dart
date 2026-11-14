@@ -3253,4 +3253,40 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bodyDeleteFailed => '没能删除，请再试一次。';
+
+  @override
+  String get serverHttpConsentNote =>
+      '这个服务器地址以 http:// 开头，筷拍发送的内容和你的上传密钥都会以未加密的方式经过网络。';
+
+  @override
+  String get serverHttpsRequiredConsentNote =>
+      '这个服务器地址不是以 https:// 开头的。在你把地址改成 https:// 之前，筷拍不会向它发送任何内容。';
+
+  @override
+  String get serverHttpFooter =>
+      '这个地址以 http:// 开头：照片、餐食文字和上传密钥都会以未加密的方式传输。服务器有了证书后，请改成 https://。';
+
+  @override
+  String get serverNeedsHttpsFooter =>
+      '需要 https:// —— 地址不是以 https:// 开头时，筷拍不会发送任何内容：不发照片、不发餐食文字，也不发上传密钥。请先为服务器配置 https，再在这里修改地址。';
+
+  @override
+  String get serverNeedsHttpsField => '需要 https://';
+
+  @override
+  String get setupLinkNeedsHttps =>
+      '这个配置链接里的服务器地址不是 https://。筷拍不会向普通的 http:// 服务器发送任何内容，所以没有进行任何设置。';
+
+  @override
+  String get errServerNeedsHttps =>
+      '你的服务器地址不是以 https:// 开头的 —— 筷拍不会向它发送任何内容。请在设置里把它改成 https:// 地址。';
+
+  @override
+  String get reasonServerNeedsHttps => '服务器地址需要 https://';
+
+  @override
+  String get diagServerNeedsHttps => '服务器地址不是以 https:// 开头的，所以不会向它发送任何内容。';
+
+  @override
+  String get diagFixServerHttps => '先为服务器配置 https，再到设置里把服务器地址改成 https://…。';
 }

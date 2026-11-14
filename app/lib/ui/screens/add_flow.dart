@@ -327,13 +327,14 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // No key (or no server) is setup that is missing, not an analysis that
     // failed: the title said "Analysis failed" for a photo nothing ever
     // looked at (U2). The body names where to add it.
-    // A saved server address that will not parse also reports noServerKey,
-    // but the server IS set up: "AI isn't set up yet" over a body saying
+    // A saved server address that will not parse (or, with the https
+    // switch on, is not https://) also reports noServerKey, but the server
+    // IS set up: "AI isn't set up yet" over a body saying
     // the address has a typo contradicted itself. It is not retryable
     // either: Retry fails again at once on the same address.
     final badAddress = failed &&
         outcome.errorKind == AnalysisErrorKind.noServerKey &&
-        isBadServerAddress(outcome.message);
+        isUnusableServerAddress(outcome.message);
     final notSetUp = failed &&
         !badAddress &&
         (outcome.errorKind == AnalysisErrorKind.noApiKey ||

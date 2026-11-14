@@ -51,7 +51,7 @@ Future<AppSettings> _settings(AiProvider provider) async {
     case AiProvider.gemini:
       await s.setGeminiApiKey('test-key');
     case AiProvider.server:
-      await s.setServerBaseUrl('http://10.0.0.5');
+      await s.setServerBaseUrl('https://10.0.0.5');
       await s.setServerApiKey('upload-key');
     default:
       fail('unused provider $provider');

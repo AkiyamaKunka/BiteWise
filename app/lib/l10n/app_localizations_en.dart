@@ -3619,4 +3619,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodyDeleteFailed => 'Couldn\'t delete. Try again.';
+
+  @override
+  String get serverHttpConsentNote =>
+      'This server\'s address starts with http://, so what Chopstats sends, and your upload key, cross the network unencrypted.';
+
+  @override
+  String get serverHttpsRequiredConsentNote =>
+      'This server\'s address does not start with https://, so Chopstats sends it nothing until you change the address to https://.';
+
+  @override
+  String get serverHttpFooter =>
+      'This address starts with http://: photos, meal text and the upload key travel unencrypted. Change it to https:// once your server has a certificate.';
+
+  @override
+  String get serverNeedsHttpsFooter =>
+      'Needs https:// — Chopstats sends nothing to an address that does not start with https://: no photos, no meal text, no upload key. Set up https on your server, then change the address here.';
+
+  @override
+  String get serverNeedsHttpsField => 'Needs https://';
+
+  @override
+  String get setupLinkNeedsHttps =>
+      'That setup link names a server without https://. Chopstats sends nothing to a plain http:// server, so nothing was set up.';
+
+  @override
+  String get errServerNeedsHttps =>
+      'Your server address does not start with https:// — Chopstats sends nothing to it. Change it to an https:// address in Settings.';
+
+  @override
+  String get reasonServerNeedsHttps => 'the server address needs https://';
+
+  @override
+  String get diagServerNeedsHttps =>
+      'The server address does not start with https://, so nothing is sent to it.';
+
+  @override
+  String get diagFixServerHttps =>
+      'Set up https on your server, then change the server address to https://… in Settings.';
 }

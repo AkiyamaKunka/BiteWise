@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
@@ -102,6 +103,73 @@ void main() {
       expect(glm, contains('your own server, which passes it to '
           'Zhipu AI (GLM)'));
       expect(glm, contains('mainland China'));
+    });
+
+    // Owner decision 2026-11-13: a plain http:// server gets nothing while
+    // the https switch is on, and the consent says so; with it off, the
+    // consent says what is sent goes unencrypted. Transport only: the
+    // wording version does not change.
+    group('a server address that is not https://', () {
+      setUp(() => debugRequireHttpsServerOverride = true);
+      tearDown(() => debugRequireHttpsServerOverride = null);
+      String server(AppLocalizations l, String url, {String plan = 'claude'}) =>
+          aiConsentText(l,
+              provider: 'server', serverBackend: plan, serverBaseUrl: url);
+
+      test('switch on: says nothing is sent until it is https://', () {
+        for (final url in ['http://10.0.0.7', 'HTTP://h.example:5000']) {
+          expect(server(en, url), endsWith(en.serverHttpsRequiredConsentNote),
+              reason: url);
+          expect(server(zh, url), endsWith(zh.serverHttpsRequiredConsentNote),
+              reason: url);
+          expect(server(en, url), isNot(contains(en.serverHttpConsentNote)));
+        }
+        // After the mainland-China note, which stays.
+        final glm = server(en, 'http://10.0.0.7', plan: 'glm');
+        expect(glm, contains('mainland China'));
+        expect(glm, endsWith(en.serverHttpsRequiredConsentNote));
+        expect(en.serverHttpsRequiredConsentNote, contains('sends it nothing'));
+        expect(zh.serverHttpsRequiredConsentNote, contains('不会向它发送任何内容'));
+      });
+
+      test('switch off: says it travels unencrypted', () {
+        debugRequireHttpsServerOverride = false;
+        expect(server(en, 'http://10.0.0.7'), endsWith(en.serverHttpConsentNote));
+        expect(server(zh, 'http://10.0.0.7'), endsWith(zh.serverHttpConsentNote));
+        expect(en.serverHttpConsentNote, contains('unencrypted'));
+        expect(zh.serverHttpConsentNote, contains('未加密'));
+      });
+
+      test('https://, no address, and other providers: no line', () {
+        for (final require in [true, false]) {
+          debugRequireHttpsServerOverride = require;
+          for (final t in [
+            server(en, 'https://10.0.0.7'),
+            server(en, ''),
+            aiConsentText(en,
+                provider: 'gemini',
+                serverBackend: 'claude',
+                serverBaseUrl: 'http://10.0.0.7'),
+          ]) {
+            expect(t, isNot(contains(en.serverHttpConsentNote)));
+            expect(t, isNot(contains(en.serverHttpsRequiredConsentNote)));
+          }
+        }
+      });
+
+      testWidgets('the dialog shows it', (tester) async {
+        await tester.pumpWidget(_app(Builder(
+            builder: (context) => TextButton(
+                onPressed: () => showAiConsentDialog(context,
+                    provider: 'server',
+                    serverBackend: 'claude',
+                    serverBaseUrl: 'http://10.0.0.7'),
+                child: const Text('go')))));
+        await tester.tap(find.text('go'));
+        await tester.pumpAndSettle();
+        expect(_dialogText(tester, _dialog),
+            endsWith(en.serverHttpsRequiredConsentNote));
+      });
     });
 
     test('mainland-China providers say where the data is processed; '
@@ -738,7 +806,7 @@ void main() {
       setupLinks: links.stream,
     );
     await tester.pumpWidget(_app(HomeShell(services: services)));
-    links.add(Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+    links.add(Uri.parse('bitewise://setup?server=https%3A%2F%2F10.0.0.7'
         '&key=k1234567890abcdef&backend=doubao'));
     await tester.pumpAndSettle();
     expect(find.textContaining('ByteDance Volcengine (Doubao)'),
@@ -771,7 +839,7 @@ void main() {
     );
     await tester
         .pumpWidget(_app(HomeShell(services: services), locale: locale));
-    links.add(Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+    links.add(Uri.parse('bitewise://setup?server=https%3A%2F%2F10.0.0.7'
         '&key=k1234567890abcdef&backend=$backend'));
     await tester.pumpAndSettle();
     return (settings, links);

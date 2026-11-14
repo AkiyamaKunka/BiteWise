@@ -3,6 +3,7 @@
 // the server configured. Malformed links are refused with a message.
 import 'dart:async';
 
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/core/setup_link.dart'
     show setupLinkRepeatWindow;
 import 'package:calorie_tracker/l10n/app_localizations.dart';
@@ -16,7 +17,7 @@ import 'fakes.dart';
 void main() {
   const key = 'k1234567890abcdef';
   final good = Uri.parse(
-      'bitewise://setup?server=http%3A%2F%2F10.0.0.7&key=$key&backend=claude');
+      'bitewise://setup?server=https%3A%2F%2F10.0.0.7&key=$key&backend=claude');
 
   (UiServices, FakeSettings, StreamController<Uri>) rig() {
     final settings = FakeSettings(apiKey: 'old', watcherEnabled: false);
@@ -43,7 +44,7 @@ void main() {
     links.add(good);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
-    expect(find.textContaining('http://10.0.0.7'), findsOneWidget);
+    expect(find.textContaining('https://10.0.0.7'), findsOneWidget);
     expect(find.textContaining('••••cdef'), findsOneWidget,
         reason: 'the key is shown masked, never in full');
     // The AI is named as Settings names it, not by the link's raw id, and
@@ -51,14 +52,14 @@ void main() {
     expect(find.textContaining('AI: Claude (server)'), findsOneWidget);
     expect(find.textContaining(': claude'), findsNothing);
     expect(find.textContaining('Plan'), findsNothing);
-    expect(settings.serverBaseUrl, isNot('http://10.0.0.7'),
+    expect(settings.serverBaseUrl, isNot('https://10.0.0.7'),
         reason: 'nothing changes before confirmation');
 
     await tester.tap(find.byKey(const Key('setupLinkConfirm')));
     await tester.pumpAndSettle();
     expect(settings.provider, 'server');
     expect(settings.serverBackend, 'claude');
-    expect(settings.serverBaseUrl, 'http://10.0.0.7');
+    expect(settings.serverBaseUrl, 'https://10.0.0.7');
     expect(settings.apiKey, key);
     await links.close();
   });
@@ -78,7 +79,7 @@ void main() {
       home: HomeShell(services: services),
     ));
     links.add(Uri.parse(
-        'bitewise://setup?server=http%3A%2F%2F10.0.0.7&key=$key&backend=glm'));
+        'bitewise://setup?server=https%3A%2F%2F10.0.0.7&key=$key&backend=glm'));
     await tester.pumpAndSettle();
     expect(find.text('用此链接配置服务器？'), findsOneWidget);
     expect(find.textContaining('AI：你服务器上的 GLM'), findsOneWidget);
@@ -100,7 +101,7 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(settings.apiKey, 'old');
-    expect(settings.serverBaseUrl, isNot('http://10.0.0.7'));
+    expect(settings.serverBaseUrl, isNot('https://10.0.0.7'));
     await links.close();
   });
 
@@ -112,6 +113,56 @@ void main() {
     expect(find.byKey(const Key('setupLinkConfirm')), findsNothing);
     expect(find.text('That setup link is not valid.'), findsOneWidget);
     expect(settings.apiKey, 'old');
+    await links.close();
+  });
+
+  // Owner decision 2026-11-13: plain http is refused everywhere. A link
+  // naming an http:// server sets nothing up and says why, in both
+  // languages; with the https switch off it is confirmed as before.
+  final plain = Uri.parse(
+      'bitewise://setup?server=http%3A%2F%2F10.0.0.7&key=$key&backend=claude');
+
+  for (final (locale, text) in [
+    (const Locale('en'), 'That setup link names a server without https://. '
+        'Chopstats sends nothing to a plain http:// server, so nothing was '
+        'set up.'),
+    (const Locale('zh'), '这个配置链接里的服务器地址不是 https://。筷拍不会向普通的 '
+        'http:// 服务器发送任何内容，所以没有进行任何设置。'),
+  ]) {
+    testWidgets('an http:// server link is refused and says why '
+        '(${locale.languageCode})', (tester) async {
+      debugRequireHttpsServerOverride = true;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
+      final (services, settings, links) = rig();
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: HomeShell(services: services),
+      ));
+      links.add(plain);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('setupLinkConfirm')), findsNothing);
+      expect(find.text(text), findsOneWidget);
+      expect(settings.apiKey, 'old');
+      expect(settings.serverBaseUrl, isNot(contains('10.0.0.7')));
+      expect(settings.aiConsentWrites, isEmpty);
+      await links.close();
+    });
+  }
+
+  testWidgets('an http:// server link with the https switch off is '
+      'confirmed as before', (tester) async {
+    debugRequireHttpsServerOverride = false;
+    addTearDown(() => debugRequireHttpsServerOverride = null);
+    final (services, settings, links) = rig();
+    await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+    links.add(plain);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('setupLinkConfirm')));
+    await tester.pumpAndSettle();
+    expect(settings.serverBaseUrl, 'http://10.0.0.7');
+    expect(settings.apiKey, key);
     await links.close();
   });
 

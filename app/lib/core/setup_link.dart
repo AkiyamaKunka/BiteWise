@@ -8,7 +8,14 @@
 /// before saving. Parsing is pure and strict: anything malformed is
 /// rejected rather than guessed, because a crafted link could otherwise
 /// point the app's photo uploads at a stranger's server.
+///
+/// A plain http:// server is refused while the https switch is on
+/// (core/server_transport.dart, owner decision 2026-11-13): the app would
+/// send it nothing, so it is not set up; [setupLinkNeedsHttps] tells that
+/// refusal apart from a malformed link, so the app can say why.
 library;
+
+import 'server_transport.dart' show serverAddressRefused;
 
 const Set<String> kSetupBackends = {'claude', 'glm', 'doubao'};
 
@@ -41,8 +48,22 @@ class SetupLink {
 /// rather than report a bad link.
 bool isSetupLinkScheme(Uri uri) => uri.scheme.toLowerCase() == 'bitewise';
 
-/// Null for anything that is not a well-formed setup link.
+/// Null for anything that is not a well-formed setup link, and for one
+/// whose server the app may not send to ([setupLinkNeedsHttps]).
 SetupLink? parseSetupLink(Uri uri) {
+  final link = _parse(uri);
+  if (link == null || serverAddressRefused(link.server)) return null;
+  return link;
+}
+
+/// Whether [uri] is a well-formed setup link refused only because its
+/// server is not https:// (core/server_transport.dart).
+bool setupLinkNeedsHttps(Uri uri) {
+  final link = _parse(uri);
+  return link != null && serverAddressRefused(link.server);
+}
+
+SetupLink? _parse(Uri uri) {
   if (!isSetupLinkScheme(uri)) return null;
   if (uri.host.toLowerCase() != 'setup') return null;
   final q = uri.queryParameters;

@@ -86,7 +86,7 @@ Future<AppSettings> _settingsFor(AiProvider p) async {
     case AiProvider.anthropic:
       await s.setAnthropicApiKey('ak');
     case AiProvider.server:
-      await s.setServerBaseUrl('http://10.0.0.5');
+      await s.setServerBaseUrl('https://10.0.0.5');
       await s.setServerApiKey('uk');
     case AiProvider.qwen:
       await s.setQwenApiKey('qk');
@@ -721,8 +721,10 @@ void main() {
         if (supported.containsKey(p)) {
           expect(support.supported, isTrue);
           expect(support.recipient, supported[p]);
-          // The owner's server here is plain http: brand-only.
-          expect(support.locationAllowed, p != AiProvider.server);
+          // The owner's server here is https:// (a plain http:// one gets
+          // nothing while the https switch is on, and only brand-only
+          // lookups with it off: server_lookup_client_test).
+          expect(support.locationAllowed, isTrue);
           return;
         }
         expect(support.supported, isFalse);

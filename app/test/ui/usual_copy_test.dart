@@ -159,8 +159,10 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// bodyDeleteFailed) and the coverage window slider's screen-reader name
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
-/// (leftoverLoadFailed, leftoverSaveFailed).
-const _keyCount = 890;
+/// (leftoverLoadFailed, leftoverSaveFailed), then the Android privacy
+/// lane's (android/privacy): ten https-only own-server lines
+/// (serverHttpConsentNote … diagFixServerHttps).
+const _keyCount = 900;
 
 Directory _appRoot() {
   var dir = Directory.current;

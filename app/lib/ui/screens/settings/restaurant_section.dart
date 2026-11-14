@@ -19,6 +19,7 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/server_transport.dart' show serverAddressRefused;
 import '../../../services/assist/clients/lookup_client.dart'
     show LookupRecipient, LookupSupport, LookupUnsupportedReason;
 import '../../../services/assist/meal_assist.dart' show AssistWhereNow;
@@ -318,7 +319,11 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
     if (paused) lines.add(l.restaurantPausedHint);
     if (copy == null) {
       lines.add(support.reason == LookupUnsupportedReason.noServerAddress
-          ? l.restaurantNeedsServerAddress
+          // An address is saved, but nothing is sent to it: not https://
+          // while the https switch is on (core/server_transport.dart).
+          ? serverAddressRefused(_s.serverBaseUrl)
+              ? l.errServerNeedsHttps
+              : l.restaurantNeedsServerAddress
           : l.restaurantUnsupported(
               providerDisplayLabel(l, _s.provider, _s.serverBackend)));
       return lines;

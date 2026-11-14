@@ -5458,6 +5458,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t delete. Try again.'**
   String get bodyDeleteFailed;
+
+  /// AI consent dialog, own server only, added after the consent text when the https switch is OFF (core/server_transport.dart kRequireHttpsServer = false) and the saved server address starts with http://. Not shown while the switch is on.
+  ///
+  /// In en, this message translates to:
+  /// **'This server\'s address starts with http://, so what Chopstats sends, and your upload key, cross the network unencrypted.'**
+  String get serverHttpConsentNote;
+
+  /// AI consent dialog, own server only, added after the consent text when the saved server address is refused by the https switch (core/server_transport.dart): plain http://, or no scheme. Nothing is sent to it.
+  ///
+  /// In en, this message translates to:
+  /// **'This server\'s address does not start with https://, so Chopstats sends it nothing until you change the address to https://.'**
+  String get serverHttpsRequiredConsentNote;
+
+  /// Settings > Your own server: added under the server section's footer when the https switch is OFF and the saved address starts with http://. Not shown while the switch is on.
+  ///
+  /// In en, this message translates to:
+  /// **'This address starts with http://: photos, meal text and the upload key travel unencrypted. Change it to https:// once your server has a certificate.'**
+  String get serverHttpFooter;
+
+  /// Settings > Your own server: added under the server section's footer when the saved server address is refused by the https switch (an address saved before the switch, or by an older app version). The address stays saved; nothing is sent to it.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs https:// — Chopstats sends nothing to an address that does not start with https://: no photos, no meal text, no upload key. Set up https on your server, then change the address here.'**
+  String get serverNeedsHttpsFooter;
+
+  /// Settings > Your own server: the server address field's error line when the address typed (not saved) or the address saved does not start with https://. Short: shown under the field.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs https://'**
+  String get serverNeedsHttpsField;
+
+  /// Snackbar when a bitewise://setup link is well formed but its server address is plain http:// (refused by the https switch). Nothing was saved.
+  ///
+  /// In en, this message translates to:
+  /// **'That setup link names a server without https://. Chopstats sends nothing to a plain http:// server, so nothing was set up.'**
+  String get setupLinkNeedsHttps;
+
+  /// A photo or a typed meal was not analyzed because the saved server address is not https:// (refused by the https switch). Nothing was sent; the photo is kept.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server address does not start with https:// — Chopstats sends nothing to it. Change it to an https:// address in Settings.'**
+  String get errServerNeedsHttps;
+
+  /// Short reason in parentheses, as reasonNoServerKey: a photo was not analyzed because the saved server address is not https://.
+  ///
+  /// In en, this message translates to:
+  /// **'the server address needs https://'**
+  String get reasonServerNeedsHttps;
+
+  /// Test AI provider, Configuration check, own server: the saved address is refused by the https switch. The page stops here and contacts nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'The server address does not start with https://, so nothing is sent to it.'**
+  String get diagServerNeedsHttps;
+
+  /// Test AI provider: the fix shown under diagServerNeedsHttps.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up https on your server, then change the server address to https://… in Settings.'**
+  String get diagFixServerHttps;
 }
 
 class _AppLocalizationsDelegate

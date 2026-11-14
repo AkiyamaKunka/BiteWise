@@ -72,7 +72,7 @@ String _bodyOf(WidgetTester tester, Finder dialog) =>
     (tester.widget<AlertDialog>(dialog).content! as Text).data!;
 
 Uri _link(String backend) =>
-    Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+    Uri.parse('bitewise://setup?server=https%3A%2F%2F10.0.0.7'
         '&key=k1234567890abcdef&backend=$backend');
 
 void main() {

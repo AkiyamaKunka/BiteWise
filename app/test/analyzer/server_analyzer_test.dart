@@ -10,6 +10,7 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
@@ -35,7 +36,7 @@ class MemoryKeyStore implements SecureKeyStore {
 }
 
 Future<AppSettings> serverSettings({
-  String? url = 'http://10.0.0.5',
+  String? url = 'https://10.0.0.5',
   String? key = 'upload-key',
   String profile = '',
 }) async {
@@ -89,7 +90,7 @@ void main() {
     expect(outcome.analysis!['total_calories'], 610);
 
     final req = requests.single;
-    expect(req.url.toString(), 'http://10.0.0.5/api/analyze_photo');
+    expect(req.url.toString(), 'https://10.0.0.5/api/analyze_photo');
     expect(req.headers['X-API-Key'], 'upload-key');
     final body = jsonDecode(req.body) as Map<String, dynamic>;
     expect(base64Decode(body['image_b64'] as String), [1, 2, 3, 4]);
@@ -814,7 +815,7 @@ void main() {
   group('serverFeatures (restaurant assist R1)', () {
     Future<(ServerFeatures?, List<http.BaseRequest>)> probe(
         http.Response Function() reply,
-        {String? url = 'http://10.0.0.5', String? key = 'upload-key'}) async {
+        {String? url = 'https://10.0.0.5', String? key = 'upload-key'}) async {
       final s = await serverSettings(url: url, key: key);
       final seen = <http.BaseRequest>[];
       final analyzer = ServerAnalyzer(s, client: MockClient((req) async {
@@ -1527,12 +1528,12 @@ void main() {
     });
   });
 
-  // A letter O typed for a zero in the port ('http://…:5OOO') made Uri.parse
+  // A letter O typed for a zero in the port ('https://…:5OOO') made Uri.parse
   // throw OUTSIDE _post's try: analyzePhoto broke its never-throws contract
   // and the pipeline burned every automatic photo to 'failed', unannounced
   // (run 7, B2). Now it is user state, like a missing address.
   group('an address that is not a URL', () {
-    const badPort = 'http://10.0.0.5:5OOO';
+    const badPort = 'https://10.0.0.5:5OOO';
 
     test('a photo: kept, never sent, never decoded, never a throw', () async {
       final s = await serverSettings(url: badPort);
@@ -1562,7 +1563,7 @@ void main() {
     });
 
     test('a text intent and the key check say so, never throw', () async {
-      final s = await serverSettings(url: 'http://[::1');
+      final s = await serverSettings(url: 'https://[::1');
       var calls = 0;
       final analyzer = ServerAnalyzer(s,
           normalizer: (b) async => b,
@@ -1621,6 +1622,130 @@ void main() {
           errorKind: classifyAnalysisError(unset.error),
           detail: unset.error);
       expect(outcomeBody(zh, o2), zh.errNoServerKey);
+    });
+  });
+
+  // Plain http:// (owner decision 2026-11-13: refuse it everywhere). With
+  // the https switch on, NOTHING reaches the address on any path: no photo,
+  // no meal text, no X-API-Key. Each case counts the requests the client
+  // saw. With the switch off the old behaviour holds.
+  group('a plain http:// server address', () {
+    // Each case sets the switch itself, so flipping kRequireHttpsServer
+    // changes no result here (server_transport_test pins the value).
+    setUp(() => debugRequireHttpsServerOverride = true);
+    tearDown(() => debugRequireHttpsServerOverride = null);
+
+    Future<(ServerAnalyzer, List<http.BaseRequest>, List<int>)> analyzerAt(
+        String url) async {
+      final s = await serverSettings(url: url);
+      final seen = <http.BaseRequest>[];
+      final decodes = <int>[];
+      final analyzer = ServerAnalyzer(s,
+          normalizer: (b) async {
+            decodes.add(b.length);
+            return b;
+          },
+          sleep: (_) async {},
+          client: MockClient((req) async {
+            seen.add(req);
+            return http.Response(
+                jsonEncode({
+                  'ok': true,
+                  'analysis': {'is_food': true, 'total_calories': 500},
+                  'result': {'ok': true},
+                  'analyzed_by': 'claude',
+                  'url': 'https://claude.ai/oauth/authorize?x=1',
+                  'claude_login': 'token',
+                  'backends': {'claude': 'enabled'},
+                  'leftover': {'items': []},
+                }),
+                200);
+          }));
+      return (analyzer, seen, decodes);
+    }
+
+    for (final url in [
+      'http://10.0.0.5',
+      'HTTP://h.example:5000',
+      'h.example',
+    ]) {
+      test('switch on: "$url" gets nothing on any path', () async {
+        final (a, seen, decodes) = await analyzerAt(url);
+        final photo = await a.analyzePhoto(jpeg());
+        expect(photo.analysis, isNull);
+        expect(photo.error, kServerNeedsHttpsMessage);
+        expect(photo.retryable, isTrue,
+            reason: 'user state: the photo is kept for an https address');
+        expect(classifyAnalysisError(photo.error),
+            AnalysisErrorKind.noServerKey);
+        expect(decodes, isEmpty, reason: 'checked before the decode');
+        final text = await a.textIntentOutcome('lunch 500 kcal');
+        expect(text.json, isNull);
+        expect(text.error, kServerNeedsHttpsMessage);
+        expect(await a.leftoverIntent(jpeg(), '{}'), isNull);
+        expect(await a.validateKey('upload-key'), kServerNeedsHttpsMessage);
+        final probe = await a.probeKey('upload-key');
+        expect(probe.result, KeyProbeResult.rejected);
+        expect(probe.message, kServerNeedsHttpsMessage);
+        expect(await a.serverLoginState(), isNull);
+        expect(await a.serverFeatures(), isNull);
+        final started = await a.startClaudeAuth();
+        expect(started.url, isNull);
+        expect(started.error, kServerNeedsHttpsMessage);
+        expect(await a.completeClaudeAuth('code#state'),
+            kServerNeedsHttpsMessage);
+        expect(seen, isEmpty, reason: 'not one request, so no upload key');
+        // And through the multi-provider front door.
+        final multi = MultiProviderAnalyzer(a.settings,
+            client: MockClient((req) async {
+          seen.add(req);
+          return http.Response('{}', 200);
+        }));
+        expect((await multi.analyzePhoto(jpeg())).error,
+            kServerNeedsHttpsMessage);
+        expect(seen, isEmpty);
+      });
+    }
+
+    test('switch on: https:// is sent as always', () async {
+      final (a, seen, _) = await analyzerAt('https://10.0.0.5');
+      expect((await a.analyzePhoto(jpeg())).analysis, isNotNull);
+      expect(seen.single.url.toString(), 'https://10.0.0.5/api/analyze_photo');
+      expect(seen.single.headers['X-API-Key'], 'upload-key');
+    });
+
+    test('switch on: a debug build (tests) keeps http:// to this device',
+        () async {
+      final (a, seen, _) = await analyzerAt('http://127.0.0.1:5000');
+      expect((await a.analyzePhoto(jpeg())).analysis, isNotNull);
+      expect(seen.single.url.toString(),
+          'http://127.0.0.1:5000/api/analyze_photo');
+    });
+
+    test('switch on: the refusal reads as its own line in both languages',
+        () async {
+      final (a, _, _) = await analyzerAt('http://10.0.0.5');
+      final out = await a.analyzePhoto(jpeg());
+      final o = PhotoOutcome(PhotoOutcomeKind.failed, out.error!,
+          retryable: true,
+          errorKind: classifyAnalysisError(out.error),
+          detail: out.error);
+      final zh = AppLocalizationsZh(), en = AppLocalizationsEn();
+      expect(outcomeBody(en, o), en.errServerNeedsHttps);
+      expect(outcomeBody(zh, o, deliberate: true), zh.errServerNeedsHttps);
+      expect(retryReason(zh, o), zh.reasonServerNeedsHttps);
+    });
+
+    test('switch off: http:// is sent, upload key and all', () async {
+      debugRequireHttpsServerOverride = false;
+      final (a, seen, _) = await analyzerAt('http://10.0.0.5');
+      expect((await a.analyzePhoto(jpeg())).analysis, isNotNull);
+      expect(await a.validateKey('upload-key'), isNull);
+      expect(seen.map((r) => r.url.toString()), [
+        'http://10.0.0.5/api/analyze_photo',
+        'http://10.0.0.5/api/auth_check',
+      ]);
+      expect(seen.first.headers['X-API-Key'], 'upload-key');
     });
   });
 }

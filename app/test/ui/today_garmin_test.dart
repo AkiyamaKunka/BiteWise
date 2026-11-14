@@ -4,6 +4,7 @@
 import 'dart:convert';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/services/garmin_client.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
@@ -181,7 +182,7 @@ void main() {
           prefs: await SharedPreferences.getInstance(),
           keyStore: MemoryKeyStore());
       await app.setProvider(AiProvider.server);
-      await app.setServerBaseUrl('http://10.0.0.7');
+      await app.setServerBaseUrl('https://10.0.0.7');
       await app.setServerApiKey('upload-key');
       await app.setAiConsent('server:claude', granted: true);
       return app;
@@ -197,9 +198,34 @@ void main() {
           await makeGarminDailyFetch(s, client: server())('2026-11-13');
       expect(daily?.activeCalories, 512);
       final req = requests.single;
-      expect(req.url.toString(), 'http://10.0.0.7/api/garmin_daily');
+      expect(req.url.toString(), 'https://10.0.0.7/api/garmin_daily');
       expect(req.headers['X-API-Key'], 'upload-key');
       expect(jsonDecode(req.body), {'date': '2026-11-13'});
+    });
+
+    // Owner decision 2026-11-13: a plain http:// address gets nothing
+    // while the https switch is on (the request carries the upload key).
+    test('asks nothing of a plain http:// address (https switch on)',
+        () async {
+      debugRequireHttpsServerOverride = true;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
+      for (final url in ['http://10.0.0.7', 'HTTP://h.example:5000', 'h.example']) {
+        await s.setServerBaseUrl(url);
+        expect(await makeGarminDailyFetch(s, client: server())('2026-11-13'),
+            isNull,
+            reason: url);
+      }
+      expect(requests, isEmpty);
+    });
+
+    test('asks a plain http:// address with the https switch off', () async {
+      debugRequireHttpsServerOverride = false;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
+      await s.setServerBaseUrl('http://10.0.0.7');
+      expect(await makeGarminDailyFetch(s, client: server())('2026-11-13'),
+          isNotNull);
+      expect(requests.single.url.toString(),
+          'http://10.0.0.7/api/garmin_daily');
     });
 
     test('asks nothing once sharing with the server is stopped', () async {

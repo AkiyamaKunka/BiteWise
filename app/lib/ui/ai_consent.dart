@@ -28,6 +28,8 @@ import 'package:flutter/material.dart';
 
 import '../core/ai_consent.dart';
 import '../core/contracts.dart' show IntakePhoto;
+import '../core/server_transport.dart'
+    show isCleartextServerUrl, serverAddressRefused;
 import 'l10n.dart';
 import 'provider_names.dart' show providerDisplayLabel;
 import 'services.dart' show SettingsStore;
@@ -53,7 +55,11 @@ String aiConsentCompanyName(AppLocalizations l,
 
 /// The full consent text for a provider choice — the body naming the
 /// recipient, plus where its company processes the data when that is
-/// mainland China.
+/// mainland China, plus, for the user's own server, how it travels when
+/// the address is not https:// (core/server_transport.dart): with the
+/// https switch on, that nothing is sent to it; with it off, that it goes
+/// unencrypted. About transport, not about what is sent, so the wording
+/// version (aiConsentWordingVersion) stays.
 String aiConsentText(AppLocalizations l,
     {required String provider,
     required String serverBackend,
@@ -72,10 +78,18 @@ String aiConsentText(AppLocalizations l,
     recipient = company;
   }
   final body = l.aiConsentBody(recipient);
-  return aiRoutesInMainlandChina
+  final text = aiRoutesInMainlandChina
           .contains(aiConsentRoute(provider, serverBackend))
       ? '$body\n\n${l.aiConsentChinaNote(company)}'
       : body;
+  final transport = provider != 'server'
+      ? null
+      : serverAddressRefused(serverBaseUrl)
+          ? l.serverHttpsRequiredConsentNote
+          : isCleartextServerUrl(serverBaseUrl)
+              ? l.serverHttpConsentNote
+              : null;
+  return transport == null ? text : '$text\n\n$transport';
 }
 
 String _hostOf(String url) {

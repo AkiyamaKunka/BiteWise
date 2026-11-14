@@ -332,8 +332,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final l = context.l10n;
     final link = parseSetupLink(uri);
     if (link == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.setupLinkInvalid)));
+      // A well-formed link to a plain http:// server is refused by the
+      // https switch (core/server_transport.dart): said as such.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(setupLinkNeedsHttps(uri)
+              ? l.setupLinkNeedsHttps
+              : l.setupLinkInvalid)));
       return;
     }
     // One question at a time: the consent-update one answers first.
