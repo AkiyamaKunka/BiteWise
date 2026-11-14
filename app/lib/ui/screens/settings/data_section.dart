@@ -2,6 +2,11 @@
 /// import one back by merge. The privacy-policy row shares this section,
 /// but its tap stays with the Settings screen, which owns the injectable
 /// URL opener.
+///
+/// Export on Android offers Save to Device… (the system's save screen,
+/// save_file_channel.dart) before Share…: Android's share sheet has no
+/// "Save to Files", and the Android footer tells people to export before
+/// changing phones.
 library;
 
 import 'dart:convert' show utf8;
@@ -17,6 +22,7 @@ import '../../../services/backup/backup_coordinator.dart';
 import '../../../services/backup/backup_files.dart';
 import '../../../services/backup/backup_format.dart';
 import '../../../services/backup/file_pick_channel.dart';
+import '../../../services/backup/save_file_channel.dart';
 import '../../backup_sheets.dart';
 import '../../format.dart' show isoDate;
 import '../../l10n.dart';
@@ -34,6 +40,17 @@ String exportFileName(DateTime now) => 'chopstats-${isoDate(now)}.json';
 bool isExportFileName(String name) =>
     name.startsWith('chopstats-') || name.startsWith('calorietracker-');
 
+/// Hands the export file at [path] to the share sheet.
+typedef ShareExportFile = Future<void> Function(String path, String subject);
+
+Future<void> _shareWithSharePlus(String path, String subject) async {
+  await SharePlus.instance
+      .share(ShareParams(files: [XFile(path)], subject: subject));
+}
+
+/// Where Export sends the file on Android.
+enum _ExportTo { device, share }
+
 class DataSection extends StatefulWidget {
   const DataSection({
     super.key,
@@ -45,6 +62,9 @@ class DataSection extends StatefulWidget {
     this.platform = 'ios',
     this.androidBackupNote = false,
     this.onImported,
+    this.fileSaver = const PlatformFileSaver(),
+    this.shareFile = _shareWithSharePlus,
+    this.tempDir = getTemporaryDirectory,
   });
 
   final MealsDao dao;
@@ -67,6 +87,16 @@ class DataSection extends StatefulWidget {
   /// are dropped.
   final VoidCallback? onImported;
 
+  /// Export › Save to Device… (Android).
+  final FileSaver fileSaver;
+
+  /// Export › Share… (and Export on iPhone).
+  final ShareExportFile shareFile;
+
+  /// Where the export is written: the app's cache folder, the only one
+  /// the native save accepts.
+  final Future<Directory> Function() tempDir;
+
   /// The 隐私政策 / Privacy Policy row's tap.
   final VoidCallback onOpenPrivacyPolicy;
 
@@ -81,6 +111,10 @@ class _DataSectionState extends State<DataSection> {
   final TextEditingController _importController = TextEditingController();
   bool _exporting = false;
   bool _importing = false;
+
+  /// This build cannot save to the device (no `saveFile` in MainActivity):
+  /// Export goes straight to Share for the rest of the session.
+  bool _saveUnavailable = false;
 
   @override
   void dispose() {
@@ -339,6 +373,79 @@ class _DataSectionState extends State<DataSection> {
     };
   }
 
+  /// Android: Save to Device… first, Share… second, asked once the file
+  /// is written (null = cancelled). iPhone, and a build without the save:
+  /// Share, as before.
+  Future<_ExportTo?> _exportTarget(AppLocalizations l10n) async {
+    if (widget.platform != 'android' || _saveUnavailable) {
+      return _ExportTo.share;
+    }
+    final theme = Theme.of(context);
+    // No spinner on the row behind the sheet.
+    setState(() => _exporting = false);
+    final to = await showGroupedSheet<_ExportTo>(
+      context,
+      title: l10n.exportSheetTitle,
+      builder: (ctx) => GroupedSection(
+        children: [
+          GroupedRow(
+            key: const Key('exportSaveToDevice'),
+            icon: Icons.save_alt_rounded,
+            iconColor: theme.colorScheme.primary,
+            title: l10n.exportSaveToDevice,
+            showChevron: false,
+            onTap: () => Navigator.of(ctx).pop(_ExportTo.device),
+          ),
+          GroupedRow(
+            key: const Key('exportShare'),
+            icon: Icons.share_rounded,
+            iconColor: theme.colorScheme.secondary,
+            title: l10n.exportShare,
+            showChevron: false,
+            onTap: () => Navigator.of(ctx).pop(_ExportTo.share),
+          ),
+          GroupedRow(
+            key: const Key('exportCancel'),
+            title: l10n.cancel,
+            showChevron: false,
+            onTap: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
+    );
+    if (mounted) setState(() => _exporting = true);
+    return to;
+  }
+
+  /// Save to Device… with the export at [file]. The temp export is deleted
+  /// afterwards whatever the answer (the native side never deletes it),
+  /// except on [SaveFileStatus.unavailable]: then it is shared instead,
+  /// and the share target still has to read it.
+  Future<void> _saveToDevice(File file, AppLocalizations l10n) async {
+    final name = file.path.split('/').last;
+    final status = await widget.fileSaver
+        .saveFile(path: file.path, name: name, mime: exportMimeType);
+    if (status == SaveFileStatus.unavailable) {
+      _saveUnavailable = true;
+      await widget.shareFile(file.path, l10n.exportShareSubject);
+      return;
+    }
+    try {
+      if (file.existsSync()) file.deleteSync();
+    } catch (_) {}
+    final line = switch (status) {
+      SaveFileStatus.ok => l10n.exportSaved,
+      SaveFileStatus.busy => l10n.exportSaveBusy,
+      SaveFileStatus.failed => l10n.exportSaveFailed,
+      // Closed by the user: nothing to say.
+      SaveFileStatus.cancelled || SaveFileStatus.unavailable => null,
+    };
+    if (line != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(line)));
+    }
+  }
+
   Future<void> _export() async {
     final l10n = context.l10n; // read before the awaits
     setState(() => _exporting = true);
@@ -352,7 +459,7 @@ class _DataSectionState extends State<DataSection> {
       // to kill the share (often the app) with
       // TransactionTooLargeException — and the import feature makes a
       // real FILE the thing the user actually wants to keep.
-      final dir = await getTemporaryDirectory();
+      final dir = await widget.tempDir();
       // Sweep older exports first: each is a FULL copy of the food log,
       // and the cache dir is readable by anything with the app's storage
       // — keeping a year of them there is a privacy cost with no upside.
@@ -372,8 +479,24 @@ class _DataSectionState extends State<DataSection> {
           // valid id, and the importer reads only the kind.
           installId: widget.backup?.installIdOrNull ?? newInstallId(),
           snapshot: snapshot);
-      await SharePlus.instance.share(ShareParams(
-          files: [XFile(file.path)], subject: l10n.exportShareSubject));
+      // Written first, so a failure is said before any choice; then where
+      // it goes (no spinner behind the sheet). Cancel deletes it again.
+      if (!mounted) return;
+      final to = await _exportTarget(l10n);
+      if (to == null) {
+        try {
+          if (file.existsSync()) file.deleteSync();
+        } catch (_) {}
+        return;
+      }
+      if (to == _ExportTo.device) {
+        await _saveToDevice(file, l10n);
+      } else {
+        // Left in the cache folder: the app it is shared to may read it
+        // after the share sheet closes (a Drive upload does). The sweep
+        // above removes it at the next export.
+        await widget.shareFile(file.path, l10n.exportShareSubject);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)

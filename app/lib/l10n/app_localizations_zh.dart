@@ -3294,4 +3294,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String shareConsentDeclinedMany(int count) {
     return '$count 张分享的照片没有分析 — 没有发送任何内容。';
   }
+
+  @override
+  String get exportSheetTitle => '导出数据';
+
+  @override
+  String get exportSaveToDevice => '保存到设备…';
+
+  @override
+  String get exportShare => '分享…';
+
+  @override
+  String get exportSaved => '导出文件已保存。';
+
+  @override
+  String get exportSaveBusy => '另一个文件窗口还开着。关掉它再试一次。';
+
+  @override
+  String get exportSaveFailed => '导出文件没能保存。可以改用「分享…」。';
 }

@@ -5524,6 +5524,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} shared photos were not analyzed — nothing was sent.'**
   String shareConsentDeclinedMany(int count);
+
+  /// Android: title of the sheet Export Data… opens, offering Save to Device… and Share….
+  ///
+  /// In en, this message translates to:
+  /// **'Export Data'**
+  String get exportSheetTitle;
+
+  /// Android, Export sheet: first option. Opens the system's save screen (Downloads, or any folder it offers) for the export file.
+  ///
+  /// In en, this message translates to:
+  /// **'Save to Device…'**
+  String get exportSaveToDevice;
+
+  /// Android, Export sheet: second option. Opens the share sheet with the export file, as iPhone's Export does.
+  ///
+  /// In en, this message translates to:
+  /// **'Share…'**
+  String get exportShare;
+
+  /// Snackbar: Save to Device… wrote the export file where the user chose.
+  ///
+  /// In en, this message translates to:
+  /// **'Export saved.'**
+  String get exportSaved;
+
+  /// Snackbar: Save to Device… could not open because another system file screen (a save or a file pick) is still open.
+  ///
+  /// In en, this message translates to:
+  /// **'Another file window is still open. Close it, then try again.'**
+  String get exportSaveBusy;
+
+  /// Snackbar: Save to Device… could not write the file (the folder refused it, the disk is full, or the system screen could not run).
+  ///
+  /// In en, this message translates to:
+  /// **'The export could not be saved. Try Share… instead.'**
+  String get exportSaveFailed;
 }
 
 class _AppLocalizationsDelegate

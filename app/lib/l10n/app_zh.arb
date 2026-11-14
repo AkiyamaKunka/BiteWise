@@ -1018,5 +1018,11 @@
   "reasonServerNeedsHttps": "服务器地址需要 https://",
   "diagServerNeedsHttps": "服务器地址不是以 https:// 开头的，所以不会向它发送任何内容。",
   "diagFixServerHttps": "先为服务器配置 https，再到设置里把服务器地址改成 https://…。",
-  "shareConsentDeclinedMany": "{count} 张分享的照片没有分析 — 没有发送任何内容。"
+  "shareConsentDeclinedMany": "{count} 张分享的照片没有分析 — 没有发送任何内容。",
+  "exportSheetTitle": "导出数据",
+  "exportSaveToDevice": "保存到设备…",
+  "exportShare": "分享…",
+  "exportSaved": "导出文件已保存。",
+  "exportSaveBusy": "另一个文件窗口还开着。关掉它再试一次。",
+  "exportSaveFailed": "导出文件没能保存。可以改用「分享…」。"
 }

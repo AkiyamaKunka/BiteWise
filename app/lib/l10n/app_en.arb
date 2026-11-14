@@ -3487,5 +3487,29 @@
         "type": "int"
       }
     }
+  },
+  "exportSheetTitle": "Export Data",
+  "@exportSheetTitle": {
+    "description": "Android: title of the sheet Export Data… opens, offering Save to Device… and Share…."
+  },
+  "exportSaveToDevice": "Save to Device…",
+  "@exportSaveToDevice": {
+    "description": "Android, Export sheet: first option. Opens the system's save screen (Downloads, or any folder it offers) for the export file."
+  },
+  "exportShare": "Share…",
+  "@exportShare": {
+    "description": "Android, Export sheet: second option. Opens the share sheet with the export file, as iPhone's Export does."
+  },
+  "exportSaved": "Export saved.",
+  "@exportSaved": {
+    "description": "Snackbar: Save to Device… wrote the export file where the user chose."
+  },
+  "exportSaveBusy": "Another file window is still open. Close it, then try again.",
+  "@exportSaveBusy": {
+    "description": "Snackbar: Save to Device… could not open because another system file screen (a save or a file pick) is still open."
+  },
+  "exportSaveFailed": "The export could not be saved. Try Share… instead.",
+  "@exportSaveFailed": {
+    "description": "Snackbar: Save to Device… could not write the file (the folder refused it, the disk is full, or the system screen could not run)."
   }
 }

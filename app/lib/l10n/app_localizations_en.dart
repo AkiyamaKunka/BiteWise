@@ -3662,4 +3662,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String shareConsentDeclinedMany(int count) {
     return '$count shared photos were not analyzed — nothing was sent.';
   }
+
+  @override
+  String get exportSheetTitle => 'Export Data';
+
+  @override
+  String get exportSaveToDevice => 'Save to Device…';
+
+  @override
+  String get exportShare => 'Share…';
+
+  @override
+  String get exportSaved => 'Export saved.';
+
+  @override
+  String get exportSaveBusy =>
+      'Another file window is still open. Close it, then try again.';
+
+  @override
+  String get exportSaveFailed =>
+      'The export could not be saved. Try Share… instead.';
 }
