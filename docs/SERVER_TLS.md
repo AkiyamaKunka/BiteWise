@@ -1,20 +1,40 @@
 # HTTPS for your own server (Caddy in front of Flask)
 
-The app's "your own server" provider talks to the Flask API over plain
-HTTP until you set this up. That means the upload key, every meal photo
-and every reply cross the network unencrypted, and anyone on the path
-who sees the key can use your Claude plan. This page puts
-[Caddy](https://caddyserver.com) in front of Flask: Caddy gets a free
-Let's Encrypt certificate, renews it on its own, and forwards to Flask
-on localhost. Flask itself does not change, and plain http keeps working
-next to https until you close it on purpose (section 6).
+**The app talks to your own server over `https://` only.** It refuses a
+plain `http://` server address (owner decision, 2026-11-13; the switch is
+`kRequireHttpsServer` in `app/lib/core/server_transport.dart`): it sends
+that address nothing at all — no photo, no meal text, no upload key —
+and says so instead:
 
-It is also the switch for the restaurant lookup's location path: the app
-sends chain names derived from a photo's location to your server **only
-over `https://`**. Over `http://` it looks up only the chains a printed
-brand or the receipt names (the request still lists them in `chains`).
-Do sections 1–4 before setting `CLAUDE_LOOKUP_ENABLED=1`; the order for
-a server that is already live is in
+- Settings → AI Provider → Your own server shows **Needs https://** under
+  the address and will not save an address that does not start with
+  `https://`;
+- a setup link (`bitewise://setup?server=http://…`) is refused with a
+  message saying why, and nothing is set up;
+- **Test This Provider** stops at its first check and contacts nothing;
+- a photo or a typed meal is not analyzed and says the address needs
+  https. Automatic photos are left for a later scan; nothing is lost.
+
+Over plain http the upload key, every meal photo and every reply would
+cross the network unencrypted, and anyone on the path who saw the key
+could use your Claude plan; Google Play's User Data policy also asks for
+encryption in transit. So this page is the default way to run the
+server, not an extra: it puts [Caddy](https://caddyserver.com) in front
+of Flask. Caddy gets a free Let's Encrypt certificate, renews it on its
+own, and forwards to Flask on localhost. Flask itself does not change,
+and plain http keeps answering next to https — for older app builds and
+the retired watchers — until you close it on purpose (section 6).
+
+The one exception is for development: a **debug** build of the app may
+use `http://` to the phone itself (`localhost`, `127.x.x.x`, `::1`), for
+example a test server reached through `adb reverse`. A release build —
+the App Store, the Play Store, the GitHub APK — never does.
+
+Older app builds (before the https-only release) send chain names
+derived from a photo's location to your server only over `https://`,
+and over `http://` look up only the chains a printed brand or the
+receipt names. Do sections 1–4 before setting `CLAUDE_LOOKUP_ENABLED=1`;
+the order for a server that is already live is in
 [SERVER_DEPLOY.md](SERVER_DEPLOY.md#restaurant-lookup-websearch-on-your-server).
 
 ## Which route
@@ -404,8 +424,10 @@ the checks**. The test must reach the server, accept the key and get an
 answer for its test picture; it spends one text run and one photo run on
 your plan. Then take one food photo and check that it analyzes.
 
-If the test cannot connect, put the `http://` address back. Nothing
-else changed, and plain http still answers.
+If the test cannot connect, putting the `http://` address back does not
+help: the app sends nothing to it. Run the checks from the Mac in
+section 4 again and fix the https side; plain http still answers older
+app builds meanwhile, and nothing else changed on the server.
 
 The first rollout stopped before this step. What it did check, from a
 Mac: Dart's `HttpClient`, the network code the app is built on,
@@ -423,6 +445,26 @@ An app build without the restaurant assist has no lookups at all. For
 it, https protects the upload key, the photos and the replies, and
 nothing else changes.
 
+### Coming from an `http://` address
+
+After an update to the https-only app, a phone whose saved address is
+`http://…` keeps everything — the meal log, the upload key, the plan,
+the AI consent — but sends nothing. Settings → AI Provider → Your own
+server shows the old address with **Needs https://** and a line saying
+nothing is sent to it. To move over:
+
+1. Put https on the server: sections 1–4 above (route A keeps the same
+   host).
+2. On the phone, change the server address to `https://$HOST` and keep
+   the upload key — or open a new setup link whose `server=` is
+   `https://$HOST`. A setup link with `http://` is refused.
+3. **Test This Provider** → **Run the checks**, as above.
+
+Automatic photos taken in between were left for the scan, and the next
+one picks them up while they are inside its look-back window. A photo
+shared or picked in between said it was not analyzed: share or pick it
+again.
+
 If you still run the Android Termux watcher or the iOS Shortcut, switch
 their server URL to `https://$HOST` too (`SERVER_URLS` in
 `~/.calorie_tracker_upload.json`; the Shortcut's URL field).
@@ -431,7 +473,8 @@ their server URL to `https://$HOST` too (`SERVER_URLS` in
 
 After section 4 the server answers at three addresses, and it can stay
 that way for as long as you like. The first rollout ended in this
-state.
+state. The current app uses only the first one; the two `http://` rows
+are for older app builds and the retired watchers.
 
 | Address | Who answers | Encrypted |
 |---|---|---|

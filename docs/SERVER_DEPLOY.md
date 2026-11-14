@@ -11,6 +11,28 @@ f800801 on a Google Cloud e2-micro VM (Ubuntu 22.04, Python 3.10.12,
 1 GB of memory, no swap). The numbers quoted from it are what that one
 run showed, not promises.
 
+## HTTPS is the deploy path
+
+The app sends nothing to a plain `http://` server address — no photo,
+no meal text, no upload key (owner decision, 2026-11-13; see
+[SERVER_TLS.md](SERVER_TLS.md)). So every server the app talks to runs
+Caddy in front of Flask with a certificate:
+
+- **A new server:** deploy as below, then
+  [SERVER_TLS.md](SERVER_TLS.md) sections 1–4 before any phone is set
+  up, and give the phone `https://$HOST` (section 5), or a setup link
+  whose `server=` is `https://$HOST`. A setup link with `http://` is
+  refused by the app.
+- **A server live on `http://` today:** do SERVER_TLS.md sections 1–4
+  before the phones update, then switch each phone to `https://$HOST`
+  ("Coming from an `http://` address" there). An updated phone that
+  still has the `http://` address shows **Needs https://** in Settings
+  and sends nothing until it is changed.
+
+The smoke tests on this page call Flask as `http://127.0.0.1:5000` on
+the VM itself: that is the VM talking to itself, never the address a
+phone uses.
+
 ## What is on the VM, and what is waiting (as of 2026-11-05)
 
 On the VM since the first rollout (f800801). The commits this page
@@ -328,11 +350,13 @@ The recommended order for a server that is already live:
    photo. The `pgrep` line is new on this page: the first rollout did
    not run it.
 3. **HTTPS next to http** ([SERVER_TLS.md](SERVER_TLS.md), "Before you
-   start" and sections 1–4). This puts https on the server. What it is
-   for arrives only once the app's own address is `https://` (step 7):
-   until then the app keeps lookups to printed brands only, and the
-   upload key that now also unlocks a web-searching model still travels
-   in clear text. Closing plain http (section 6 there) is a separate,
+   start" and sections 1–4), if the server does not have it yet. The
+   current app sends nothing to an `http://` address, lookups included,
+   so this step is required, and what it is for arrives once the app's
+   own address is `https://` (step 7). An older app build at an
+   `http://` address keeps lookups to printed brands only, and its
+   upload key, which also unlocks a web-searching model, travels in
+   clear text. Closing plain http (section 6 there) is a separate,
    later step and not part of switching lookups on.
 4. **Switch it on.** Add the knob to `.env` and restart. Two things to
    get right: the file must end with a newline before you append to it
@@ -453,10 +477,12 @@ The recommended order for a server that is already live:
 7. **Switch the app to https**
    ([SERVER_TLS.md, section 5](SERVER_TLS.md#5-switch-the-app-to-https)):
    the server address in the app becomes `https://…`. Until you do, the
-   app sends your server only the chains a printed brand or the receipt
-   names, never the ones found by a photo's location, and the upload
-   key still travels in clear text with every photo. The first rollout
-   stopped before this step.
+   current app sends your server nothing — no photo, no lookup, no
+   upload key — and Settings shows **Needs https://**. An older app
+   build sends only the chains a printed brand or the receipt names,
+   never the ones found by a photo's location, and its upload key
+   travels in clear text with every photo. The first rollout stopped
+   before this step.
 8. **Record a real stream** (optional; only on a machine with memory
    for a second CLI process, and it spends one more search run). With
    `APP` and `SPATH` set as in step 2:
