@@ -12,8 +12,12 @@ and says so instead:
 - a setup link (`bitewise://setup?server=http://…`) is refused with a
   message saying why, and nothing is set up;
 - **Test This Provider** stops at its first check and contacts nothing;
-- a photo or a typed meal is not analyzed and says the address needs
-  https. Automatic photos are left for a later scan; nothing is lost.
+- a photo, a typed meal or a leftovers photo is not analyzed and says
+  the address needs https;
+- automatic logging (Watch Camera Roll) does not run at all — no photo
+  is read — and Settings says so under Photos. Nothing is lost: once the
+  address is `https://`, the next scan picks up the photos still inside
+  its look-back window.
 
 Over plain http the upload key, every meal photo and every reply would
 cross the network unencrypted, and anyone on the path who saw the key
@@ -460,8 +464,8 @@ nothing is sent to it. To move over:
    `https://$HOST`. A setup link with `http://` is refused.
 3. **Test This Provider** → **Run the checks**, as above.
 
-Automatic photos taken in between were left for the scan, and the next
-one picks them up while they are inside its look-back window. A photo
+Automatic logging did not run in between; the first scan after the
+change picks up the photos still inside its look-back window. A photo
 shared or picked in between said it was not analyzed: share or pick it
 again.
 
@@ -580,8 +584,17 @@ Three things first:
 Every step is undone on its own, and nothing in the database depends on
 the address.
 
-- **The app:** set the server address back to the `http://` one. While
-  http and https run side by side, that always works.
+**There is no `http://` fallback for the current app.** It sends nothing
+to a plain `http://` address, so undoing Caddy leaves every phone on the
+https-only app unable to use the server until https is back. When https
+breaks, fix it rather than roll it back: `sudo caddy validate --config
+/etc/caddy/Caddyfile`, `sudo journalctl -u caddy --since '-1d' --no-pager`,
+and "Checks later" below. The rollback steps here are for phones that
+still run an older app build (before the https-only release).
+
+- **The app (older builds only):** set the server address back to the
+  `http://` one. While http and https run side by side, that works for
+  them. The current app refuses it.
 - **Section 6:** remove `API_BIND_HOST` (or set it to `0.0.0.0`) and
   `TRUSTED_PROXY_ENABLED` from `.env`, restart `caloriebot`, and
   re-allow `tcp:5000` and `tcp:80` in the firewall. Port 80 then works
@@ -589,10 +602,11 @@ the address.
   the saved rule back: `sudo iptables -t nat` followed by the
   `-A PREROUTING …` line you kept in `~/iptables_nat_prerouting.txt`. Do
   that before you stop Caddy, or port 80 has nothing behind it.
-- **Caddy:** once Caddy is stopped, plain http on port 80 needs the
-  redirect rule again, and an unsaved rule is gone after any reboot. So
-  go in this order:
-  1. Set the app back to the `http://` address (the first bullet).
+- **Caddy** (only when no phone runs the https-only app): once Caddy is
+  stopped, plain http on port 80 needs the redirect rule again, and an
+  unsaved rule is gone after any reboot. So go in this order:
+  1. Set each older app back to the `http://` address (the first
+     bullet).
   2. On the VM, `sudo iptables -t nat -S PREROUTING`. If the
      `--dport 80 -j REDIRECT --to-ports 5000` rule is not listed, port
      80 is being answered by Caddy's `:80` block and would have nothing
@@ -631,7 +645,13 @@ the address.
   away, read the journal.
 - If a certificate ever does expire, the app cannot connect: its test
   says that it could not reach the server, and new photos wait and are
-  tried again later. Plain http still works if you have not closed it.
+  tried again later. There is no `http://` fallback for the current app
+  (it sends nothing to plain http), so a lapsed certificate means fixing
+  or renewing Caddy's: read the journal (the renewal check above), make
+  sure port 443 still reaches Caddy (section 2), then
+  `sudo systemctl restart caddy`. On route A a certificate lives only 160
+  hours, so a renewal that stops working shows within a week. Plain http,
+  if you have not closed it, still answers older app builds only.
 - Do not reinstall Caddy or empty `/var/lib/caddy` to start over: Let's
   Encrypt issues only a few new certificates a week for the same address
   or name, while the stored certificate renews without that limit. After
