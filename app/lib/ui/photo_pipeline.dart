@@ -84,10 +84,13 @@ class PhotoOutcome {
   final String? kcal;
   final int? deductedKcal;
 
-  /// [PhotoOutcomeKind.leftoverApplied] only: the meal that was cut, its
-  /// day, and its analysis as it stood just BEFORE this deduction — what
-  /// the add flow's "not leftovers" undo writes back (revertedLeftover).
+  /// [PhotoOutcomeKind.leftoverApplied]: the meal that was cut, its day,
+  /// and its analysis as it stood just BEFORE this deduction — what the
+  /// add flow's "not leftovers" undo writes back (revertedLeftover).
   /// [analysis] is then the deducted analysis this run stored.
+  /// [PhotoOutcomeKind.saved]: the new meal and the day it was logged for
+  /// (the add flow says that day when an old photo went to today); no
+  /// [previousAnalysis].
   final int? mealId;
   final String? mealDate;
   final Map<String, dynamic>? previousAnalysis;
@@ -1448,7 +1451,12 @@ class PhotoPipeline {
     // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
     // a number that is guaranteed to miss.
     final saved = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
-        analysis: analysis, detail: summary, mealName: name, kcal: kcal);
+        analysis: analysis,
+        detail: summary,
+        mealName: name,
+        kcal: kcal,
+        mealId: id,
+        mealDate: isoDate(when));
     // Same shield as the thumbnail: these run AFTER the commit, so a
     // throwing callback must not fall into the outer catch — that
     // flipped the committed ledger row saved→failed and told the user

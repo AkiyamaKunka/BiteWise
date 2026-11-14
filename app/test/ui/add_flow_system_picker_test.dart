@@ -12,6 +12,10 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/coerce.dart' show isoDate;
+import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
+import 'package:calorie_tracker/services/photo/glasses.dart'
+    show captureMetaFor;
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/system_photo_picker.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
@@ -377,6 +381,90 @@ void main() {
       expect(system.picks, [1, 1]);
     });
   }
+
+  // Review 2026-11-13, finding 6: the picker refuses no image type. It
+  // replaces the grid, which lists every image the library holds (no
+  // extension filter), and an image that cannot be decoded is not dropped
+  // in silence: the analysis says so and offers Log manually. AVIF, which
+  // the share sheet's coarse name filter refuses, decodes through the
+  // engine codec on Android 12+.
+  testWidgets('a picked photo of any image type goes on to the analysis; '
+      'one that cannot be decoded says so, with Log manually',
+      (tester) async {
+    final w = _World(
+        outcome: const PhotoOutcome(PhotoOutcomeKind.failed,
+            'This photo could not be processed (it could not be decoded).',
+            errorKind: AnalysisErrorKind.badPhoto));
+    await _open(
+        tester,
+        AddPhotoScreen(
+            services: w.services,
+            systemPicker:
+                FakeSystemPicker(replies: [_ok(_picked('IMG_0042.avif'))])));
+    expect(w.processed.single.fileName, 'IMG_0042.avif');
+    expect(find.textContaining('could not be decoded'), findsOneWidget);
+    expect(find.byKey(const Key('logManuallyButton')), findsOneWidget);
+  });
+
+  // Review 2026-11-13, finding 7: a photo past the 45-day dating window
+  // (spec §8) is logged for today — and "Choose from all photos…" exists
+  // for older photos. The rule stays; the dialog says which day was used,
+  // so the user can move the meal.
+  group('a photo older than the dating window', () {
+    IntakePhoto takenAgo(Duration age) {
+      final taken = DateTime.now().subtract(age);
+      return IntakePhoto(_bytes, '', 'lunch.jpg',
+          deliberate: true,
+          capture: captureMetaFor(_bytes, 'lunch.jpg', createDate: taken));
+    }
+
+    PhotoOutcome savedFor(String date) => PhotoOutcome(
+        PhotoOutcomeKind.saved, 'Meal logged: Noodles — ~500 kcal',
+        detail: 'Noodles — ~500 kcal',
+        mealName: 'Noodles',
+        kcal: '500',
+        mealId: 7,
+        mealDate: date);
+
+    testWidgets('logged for today: the dialog says when it was taken',
+        (tester) async {
+      final photo = takenAgo(const Duration(days: 60));
+      final w = _World(outcome: savedFor(isoDate(DateTime.now())));
+      await _open(
+          tester,
+          AddPhotoScreen(
+              services: w.services,
+              systemPicker: FakeSystemPicker(replies: [_ok(photo)])));
+      expect(find.textContaining('more than 45 days ago, so its meal was '
+              'logged for today'),
+          findsOneWidget);
+      expect(find.textContaining(', ${photo.capture!.createDate!.year}'),
+          findsOneWidget,
+          reason: 'the day it was taken, with its year');
+    });
+
+    testWidgets('no note for a photo inside the window, or one its own day '
+        'dated', (tester) async {
+      for (final (age, logged) in [
+        (const Duration(days: 3), isoDate(DateTime.now())), // in the window
+        (
+          const Duration(days: 60),
+          isoDate(DateTime.now().subtract(const Duration(days: 60)))
+        ), // dated by the photo itself
+      ]) {
+        final w = _World(outcome: savedFor(logged));
+        await _open(
+            tester,
+            AddPhotoScreen(
+                services: w.services,
+                systemPicker: FakeSystemPicker(replies: [_ok(takenAgo(age))])));
+        expect(find.text('OK'), findsOneWidget);
+        expect(find.textContaining('days ago'), findsNothing,
+            reason: '$age');
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
+  });
 
   group('full photo access (the GitHub APK, once granted)', () {
     testWidgets('the grid as before, plus a row that opens the picker',

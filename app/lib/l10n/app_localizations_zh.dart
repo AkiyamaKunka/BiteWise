@@ -3262,4 +3262,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addPickerUnavailable => '这台手机上无法打开照片选择器。你仍然可以在相册应用里把照片分享给筷拍。';
+
+  @override
+  String addOldPhotoLoggedToday(String taken, int days) {
+    return '这张照片拍摄于 $taken，已超过 $days 天，所以这餐记在了今天。如需记到拍摄当天，请打开这餐修改日期。';
+  }
 }

@@ -5476,6 +5476,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The photo picker can\'t open on this phone. You can still share a photo to Chopstats from your gallery app.'**
   String get addPickerUnavailable;
+
+  /// Log › From recent photos: added under the Meal logged dialog when the photo was taken before the dating window (spec §8: 45 days), so the meal was logged for today. {taken} is the day the photo was taken, with its year (e.g. 'Sep 1, 2026'); {days} is the window (45). The meal editor's date field moves the meal.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was taken on {taken}, more than {days} days ago, so its meal was logged for today. To log it on its own day, open the meal and change its date.'**
+  String addOldPhotoLoggedToday(String taken, int days);
 }
 
 class _AppLocalizationsDelegate

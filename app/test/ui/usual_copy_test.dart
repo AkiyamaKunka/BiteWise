@@ -160,8 +160,10 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
 /// (leftoverLoadFailed, leftoverSaveFailed), then Android's system photo
-/// picker (addChooseAllPhotos, addPickerNote, addPickerUnavailable).
-const _keyCount = 893;
+/// picker (addChooseAllPhotos, addPickerNote, addPickerUnavailable) and
+/// the note for a photo older than the dating window
+/// (addOldPhotoLoggedToday).
+const _keyCount = 894;
 
 Directory _appRoot() {
   var dir = Directory.current;

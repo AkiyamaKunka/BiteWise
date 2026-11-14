@@ -9,8 +9,11 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
+import '../../core/coerce.dart' show isoDate;
 import '../../core/contracts.dart';
+import '../../core/shared_generated.dart' show SharedConstants;
 import '../../core/leftover_logic.dart' show revertedLeftover;
 import '../../core/outcome_kind.dart';
 import '../../services/analyzer/platform_decode.dart';
@@ -529,6 +532,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
       PhotoOutcomeKind.skipped => l.outcomeLogManuallyHint,
       PhotoOutcomeKind.failed when !quotaPaused =>
         l.outcomeLogManuallyFailedHint,
+      PhotoOutcomeKind.saved => _oldPhotoNote(deliberate, outcome),
       _ => null,
     };
     final choice = await showDialog<String>(
@@ -614,6 +618,24 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     if (outcome.kind == PhotoOutcomeKind.saved && mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  /// A photo taken before the dating window (spec §8, 45 days) is logged
+  /// for today, and "Choose from all photos…" is there for older photos:
+  /// say which day it was taken, so the user can move the meal (review
+  /// 2026-11-13). Null when the meal went to the photo's own day, or the
+  /// photo's date is unknown.
+  String? _oldPhotoNote(IntakePhoto photo, PhotoOutcome outcome) {
+    final taken = photo.capture?.createDate;
+    final logged = outcome.mealDate;
+    if (taken == null || logged == null) return null;
+    final now = DateTime.now();
+    const window = SharedConstants.capturedAtMaxAgeDaysDefault;
+    if (logged != isoDate(now) || isoDate(taken) == logged) return null;
+    if (now.difference(taken) <= const Duration(days: window)) return null;
+    final locale = Localizations.maybeLocaleOf(context)?.toString();
+    return context.l10n.addOldPhotoLoggedToday(
+        DateFormat.yMMMd(locale).format(taken), window);
   }
 
   /// Puts the cut meal back as it was before THIS deduction. Re-reads the

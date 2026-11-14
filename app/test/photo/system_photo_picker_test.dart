@@ -357,6 +357,11 @@ void main() {
       final out = await pipeline().enqueue(await pickLunch(bytes));
       expect(out.kind, PhotoOutcomeKind.saved);
       expect(analyzer.calls, 1);
+      // The saved verdict names its meal and the day it was logged for
+      // (the add flow's dialog says it when an old photo went to today).
+      final meal = (await meals()).single;
+      expect(out.mealId, meal.id);
+      expect(out.mealDate, meal.date);
 
       // The same photo in the library, as the watcher's catch-up lists it.
       library.assets.add(_Asset('1000000042', DateTime(2026, 11, 13, 12, 5),
