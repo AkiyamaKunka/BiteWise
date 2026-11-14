@@ -7,10 +7,14 @@
 // without it) can never be read again. The plugin's own resetOnError
 // covers only its key-mismatch exceptions; any other failure reached
 // AppSettings.load, main.dart then showed StartupErrorApp, and its Retry
-// could never succeed. On Android a key that cannot be read is now no key, so the app
-// starts and asks for it. Only reads: a failed save or delete still fails.
-// iOS keeps MigratingKeyStore exactly as it was (owner rule: no keychain
-// changes), where a locked phone's failed read MUST propagate.
+// could never succeed. On Android a key that cannot be read (after one
+// retry) is now no key, so the app starts and asks for it. Such a key may
+// still be good (a passing Keystore error), so for the rest of the run a
+// delete of it is skipped: tapping out of the empty key field must never
+// erase it. A save still overwrites it. Only the plugin's
+// PlatformException is forgiven; a failed save or a missing plugin still
+// fails. iOS keeps MigratingKeyStore exactly as it was (owner rule: no
+// keychain changes), where a locked phone's failed read MUST propagate.
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -30,6 +34,8 @@ void main() {
 
   late Map<String, String> stored;
   late Set<String> broken;
+  /// Keys whose next read fails once, then reads normally.
+  late Set<String> flaky;
   late List<MethodCall> calls;
   late List<String> logged;
   late DebugPrintCallback savedPrint;
@@ -37,6 +43,8 @@ void main() {
   setUp(() {
     stored = {};
     broken = {};
+    flaky = {};
+    AndroidSecureKeyStore.debugForgetUnreadable();
     calls = [];
     logged = [];
     savedPrint = debugPrint;
@@ -47,7 +55,7 @@ void main() {
       final key = (call.arguments as Map)['key'] as String?;
       switch (call.method) {
         case 'read':
-          if (broken.contains(key)) {
+          if (flaky.remove(key) || broken.contains(key)) {
             // What the plugin sends for a store it cannot decrypt: its
             // message and stack trace, which could quote anything.
             throw PlatformException(
@@ -202,6 +210,64 @@ void main() {
       await store.delete('k');
       expect(await store.read('k'), isNull);
       expect(calls.map((c) => c.method), ['write', 'read', 'delete', 'read']);
+      expect(logged, isEmpty);
+    });
+
+    // The review repro (2026-11-13): one passing failure at launch, then the
+    // user taps into the empty key field and out again. onTapOutside
+    // (api_key_page.dart, subscription_page.dart) saves '' for the active
+    // provider, and setGeminiApiKey('') deletes. The good key must survive.
+    test('clearing a key that could not be read this run keeps the stored '
+        'one', () async {
+      stored['gemini_api_key'] = _secret;
+      broken.add('gemini_api_key');
+      final settings = await load();
+      expect(settings.geminiApiKey, isNull);
+      await settings.setGeminiApiKey('');
+      expect(calls.where((c) => c.method == 'delete'), isEmpty);
+      expect(stored['gemini_api_key'], _secret);
+      expect(logged.join('\n'), isNot(contains(_secret)));
+      // The store recovers: the next launch has the key again.
+      broken.clear();
+      AndroidSecureKeyStore.debugForgetUnreadable();
+      expect((await load()).geminiApiKey, _secret);
+    });
+
+    test('a key saved after a failed read is a key again: a later clear '
+        'deletes it', () async {
+      stored['gemini_api_key'] = 'unreadable';
+      broken.add('gemini_api_key');
+      final settings = await load();
+      broken.clear();
+      await settings.setGeminiApiKey('new-key');
+      expect(stored['gemini_api_key'], 'new-key');
+      await settings.setGeminiApiKey('');
+      expect(stored.containsKey('gemini_api_key'), isFalse);
+      // So is one that read fine on a later read.
+      stored['openai_api_key'] = 'k';
+      broken.add('openai_api_key');
+      final store = platformKeyStore();
+      expect(await store.read('openai_api_key'), isNull);
+      broken.clear();
+      expect(await store.read('openai_api_key'), 'k');
+      await store.delete('openai_api_key');
+      expect(stored.containsKey('openai_api_key'), isFalse);
+    });
+
+    test('one passing failure is retried, and not reported', () async {
+      stored['gemini_api_key'] = _secret;
+      flaky.add('gemini_api_key');
+      final settings = await load();
+      expect(settings.geminiApiKey, _secret);
+      expect(logged, isEmpty);
+      await settings.setGeminiApiKey('');
+      expect(stored.containsKey('gemini_api_key'), isFalse,
+          reason: 'it was read, so a clear deletes it');
+    });
+
+    test("only the plugin's PlatformException is forgiven", () async {
+      messenger.setMockMethodCallHandler(_channel, null);
+      await expectLater(load(), throwsA(isA<MissingPluginException>()));
       expect(logged, isEmpty);
     });
 

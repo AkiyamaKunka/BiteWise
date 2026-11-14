@@ -48,25 +48,63 @@ class FlutterSecureKeyStore implements SecureKeyStore {
 /// it) can never be read again, and the plugin's resetOnError covers only
 /// its key-mismatch exceptions. Any other failure stopped
 /// [AppSettings.load], and the startup error's Retry could never succeed;
-/// now the app starts without that key and asks for it. The diagnostics line names the key
-/// and the error's type, never the value or the plugin's message. Reads
-/// only: a failed write or delete still throws, and the unreadable entry
-/// is left as it is (saving a key overwrites it).
+/// now the app starts without that key and asks for it.
+///
+/// - Only the plugin's [PlatformException] is forgiven, after one retry.
+///   Anything else (a missing plugin, a bug) still fails the load.
+/// - The diagnostics line names the key and the error's type, never the
+///   value or the plugin's message.
+/// - What reaches here may also be a passing Keystore error with the
+///   stored key still good. So for the rest of this run a delete of a key
+///   whose read failed is skipped: the key field shows empty, and tapping
+///   out of it saves '' (a delete), which must never erase that key. A
+///   write still overwrites it, and a later good read ends the hold.
+/// - A failed write, or the delete of any other key, still throws.
 ///
 /// Never on iOS, where a locked phone's failed read must propagate
 /// ([MigratingKeyStore]).
 class AndroidSecureKeyStore extends FlutterSecureKeyStore {
   const AndroidSecureKeyStore();
 
+  /// The keys whose read failed in this engine's run, so a delete keeps
+  /// them. Per isolate: the background engine keeps its own (it never
+  /// deletes keys).
+  static final Set<String> _unreadable = {};
+
+  @visibleForTesting
+  static void debugForgetUnreadable() => _unreadable.clear();
+
   @override
   Future<String?> read(String key) async {
-    try {
-      return await super.read(key);
-    } catch (e) {
-      debugPrint('Settings: the stored $key could not be read '
-          '(${e.runtimeType}); treated as no key');
-      return null;
+    for (var attempt = 1;; attempt++) {
+      try {
+        final value = await super.read(key);
+        _unreadable.remove(key);
+        return value;
+      } on PlatformException catch (e) {
+        if (attempt < 2) continue;
+        _unreadable.add(key);
+        debugPrint('Settings: the stored $key could not be read '
+            '(${e.runtimeType}); treated as no key');
+        return null;
+      }
     }
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    await super.write(key, value);
+    _unreadable.remove(key);
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    if (_unreadable.contains(key)) {
+      debugPrint('Settings: kept the stored $key, which could not be read '
+          'this run');
+      return;
+    }
+    await super.delete(key);
   }
 }
 
