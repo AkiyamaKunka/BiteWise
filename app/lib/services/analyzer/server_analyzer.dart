@@ -19,8 +19,16 @@ part of 'provider_analyzers.dart';
 /// here sends NOTHING to it — no photo, no text, no X-API-Key — and says
 /// [kServerNeedsHttpsMessage] instead ([_refused]). docs/SERVER_TLS.md
 /// puts Caddy in front of Flask for the certificate.
+///
+/// Every request goes through an [HttpsOnlyServerClient] wrapped around
+/// [client] (services/server_http_client.dart): the choke point that
+/// refuses such an address whatever method sends, with redirects off. The
+/// [_refused] checks below are only for the words the user sees (and to
+/// skip a photo's decode).
 class ServerAnalyzer extends _HttpVisionAnalyzer {
-  ServerAnalyzer(super.settings, {super.client, super.sleep, super.normalizer});
+  ServerAnalyzer(super.settings,
+      {http.Client? client, super.sleep, super.normalizer})
+      : super(client: HttpsOnlyServerClient.wrap(client));
 
   @override
   String? get apiKey => settings.serverApiKey;
@@ -209,7 +217,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     // its own shared/ copy (same posture as analyze_photo).
     final key = (apiKey ?? '').trim();
     if (key.isEmpty || settings.serverBaseUrl.isEmpty || _refused) {
-      return null;
+      return null; // refused before the decode, not only at the client
     }
     // The plan as the call starts, before the decode ([_callPlan]).
     final sentBackend = settings.serverBackend;
@@ -504,7 +512,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   Future<ServerFeatures?> serverFeatures() async {
     final base = settings.serverBaseUrl;
     final key = (settings.serverApiKey ?? '').trim();
-    if (base.isEmpty || key.isEmpty || _refused) return null;
+    if (base.isEmpty || key.isEmpty) return null;
     try {
       final req = http.Request('POST', _uri('/api/auth_check'))
         ..headers['content-type'] = 'application/json'
