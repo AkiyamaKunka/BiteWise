@@ -121,10 +121,15 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
+# Regenerate with `dart run flutter_launcher_icons` (in app/). The adaptive
+# icon's two layers come from scripts/play_graphics.py --launcher: the art
+# with the #F0EBE2 background keyed out (so the background layer shows
+# through), and the white silhouette Android 13+ tints for themed icons.
 flutter_launcher_icons:
   android: true
   ios: true
   remove_alpha_ios: true
   image_path: assets/app_icon.png
   adaptive_icon_background: "#F0EBE2"
-  adaptive_icon_foreground: assets/app_icon.png
+  adaptive_icon_foreground: assets/app_icon_foreground.png
+  adaptive_icon_monochrome: assets/app_icon_monochrome.png

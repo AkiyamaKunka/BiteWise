@@ -28,6 +28,7 @@ import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
     show kApiKeyChoices, kKnownModels, modelChoiceLabel, noteLabel;
+import 'package:calorie_tracker/ui/theme/tokens.dart' show AppColors;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/store_listing_files.dart';
@@ -767,6 +768,68 @@ void main() {
       expect(shots, contains('24-bit PNG with no alpha'));
     });
 
+    // Android 13+ themed icons need a monochrome layer (lint
+    // MonochromeLauncherIcon). flutter_launcher_icons writes it from
+    // pubspec.yaml, from the layers scripts/play_graphics.py --launcher
+    // makes out of assets/app_icon.png.
+    test('the adaptive icon has its monochrome layer at every density', () {
+      final xml =
+          _read('android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml');
+      expect(xml, contains('<monochrome>'));
+      expect(xml, contains('@drawable/ic_launcher_monochrome'));
+      final pubspec = _read('pubspec.yaml');
+      expect(pubspec,
+          contains('adaptive_icon_foreground: assets/app_icon_foreground.png'));
+      expect(pubspec,
+          contains('adaptive_icon_monochrome: assets/app_icon_monochrome.png'));
+      for (final name in ['app_icon_foreground.png', 'app_icon_monochrome.png']) {
+        expect(_pngHeader(File('${_appRoot().path}/assets/$name')),
+            (1024, 1024, 8, 6),
+            reason: name);
+      }
+      const sizes = {
+        'mdpi': 108,
+        'hdpi': 162,
+        'xhdpi': 216,
+        'xxhdpi': 324,
+        'xxxhdpi': 432,
+      };
+      for (final MapEntry(key: density, value: px) in sizes.entries) {
+        for (final layer in ['foreground', 'monochrome']) {
+          final f = File('${_appRoot().path}/android/app/src/main/res/'
+              'drawable-$density/ic_launcher_$layer.png');
+          expect(_pngHeader(f), (px, px, 8, 6), reason: '$density $layer');
+        }
+      }
+    });
+
+    // Android 12+ draws its own splash screen from the launch theme: the
+    // app's page colour, light and dark, instead of Theme.Light's white.
+    test('the Android 12+ splash uses the page colours', () {
+      String argb(int v) =>
+          '#${v.toRadixString(16).padLeft(8, '0').toUpperCase()}';
+      final light = argb(AppColors.light.page.toARGB32());
+      final dark = argb(AppColors.dark.page.toARGB32());
+      expect(light, '#FFF2F2F7');
+      expect(dark, '#FF000000');
+      for (final (folder, colour) in [
+        ('values-v31', light),
+        ('values-night-v31', dark),
+      ]) {
+        final xml = _read('android/app/src/main/res/$folder/styles.xml');
+        expect(xml, contains('<style name="LaunchTheme"'), reason: folder);
+        expect(
+            xml,
+            contains('<item name="android:windowSplashScreenBackground">'
+                '$colour</item>'),
+            reason: folder);
+        expect(xml,
+            contains('<item name="android:colorBackground">$colour</item>'),
+            reason: folder);
+        expect(xml, isNot(contains('<style name="NormalTheme"')),
+            reason: folder);
+      }
+    });
   });
 
 }

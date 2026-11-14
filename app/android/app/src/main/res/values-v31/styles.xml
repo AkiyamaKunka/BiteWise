@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 and later (API 31+), Dark Mode off. The system splash
+         screen and the launch window behind Flutter's first frame take the
+         app's page colour (AppColors.light.page, lib/ui/theme/tokens.dart)
+         instead of Theme.Light's white. Only LaunchTheme is overridden here;
+         NormalTheme still comes from values/styles.xml. Keep the parent and
+         windowBackground in step with LaunchTheme there. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:colorBackground">#FFF2F2F7</item>
+        <item name="android:windowSplashScreenBackground">#FFF2F2F7</item>
+    </style>
+</resources>
