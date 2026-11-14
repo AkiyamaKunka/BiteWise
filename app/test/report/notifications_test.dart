@@ -468,6 +468,29 @@ void main() {
       expect(android.live['calorietracker_reports']!.name, 'Daily summary');
     });
 
+    // Review (finding 9): 'Silent' on the old shared channel (importance
+    // low) muted the meal cards' sound too; the new channel keeps it.
+    test('the new channel takes the old one\'s importance when lower than '
+        'default, never higher', () async {
+      for (final (old, expected) in const [
+        (Importance.low, Importance.low), // Silent
+        (Importance.min, Importance.min),
+        (Importance.high, Importance.defaultImportance),
+        (Importance.defaultImportance, Importance.defaultImportance),
+        (Importance.unspecified, Importance.defaultImportance),
+      ]) {
+        final android = _FakeAndroid(existing: [
+          AndroidNotificationChannel('calorietracker_reports', 'Reports & meals',
+              importance: old),
+        ]);
+        await ReportNotifier(plugin: _RecordingPlugin(android: android))
+            .init();
+        expect(android.live[ReportNotifier.mealChannelId]!.importance,
+            expected,
+            reason: '$old');
+      }
+    });
+
     test('created only once: later syncs never ask for importance none',
         () async {
       final android = _FakeAndroid(existing: [

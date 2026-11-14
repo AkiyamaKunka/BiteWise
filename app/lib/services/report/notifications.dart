@@ -207,11 +207,12 @@ class ReportNotifier {
   /// throws: a no-op off Android.
   ///
   /// The meal-card channel is new with the Play push. A user who had muted
-  /// the old shared channel muted the meal cards with it, so when the
-  /// summary's channel is blocked (importance none) the meal channel is
-  /// CREATED blocked too — Android accepts IMPORTANCE_NONE at creation
-  /// (its range check is NONE..MAX). Should it refuse, or should the
-  /// channel list be unreadable, meal cards stay on the summary's channel.
+  /// the old shared channel, or set it Silent, did so for the meal cards
+  /// too, so the meal channel is CREATED at the lower of the summary
+  /// channel's importance and default — blocked (none) included: Android
+  /// accepts IMPORTANCE_NONE at creation (its range check is NONE..MAX).
+  /// Should it refuse, or should the channel list be unreadable, meal
+  /// cards stay on the summary's channel.
   Future<void> _syncChannel() async {
     final AndroidFlutterLocalNotificationsPlugin? android;
     try {
@@ -236,16 +237,23 @@ class ReportNotifier {
       final existing =
           await android.getNotificationChannels() ?? const <AndroidNotificationChannel>[];
       final mealExists = existing.any((c) => c.id == mealChannelId);
-      final summaryBlocked = existing.any((c) =>
-          c.id == summaryChannelId && c.importance == Importance.none);
+      // The old shared channel's importance, when lower than default: a
+      // user who had set it Silent (low) or blocked it (none) had the meal
+      // cards silent or blocked with it.
+      Importance? lower;
+      for (final c in existing) {
+        final v = c.importance.value;
+        if (c.id == summaryChannelId && v >= 0 && v < _importance.value) {
+          lower = c.importance;
+        }
+      }
       final meal = _mealChannel();
       await android.createNotificationChannel(AndroidNotificationChannel(
         mealChannelId,
         meal.name,
         description: meal.description,
         // Only at creation: an existing channel keeps whatever it has.
-        importance:
-            !mealExists && summaryBlocked ? Importance.none : _importance,
+        importance: mealExists ? _importance : (lower ?? _importance),
       ));
       _mealsOnSummaryChannel = false;
     } catch (_) {
