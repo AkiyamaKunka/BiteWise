@@ -5584,6 +5584,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'About {size} for Android\'s own backup, which keeps at most 25 MB per app.'**
   String diagBackupSizeLine(String size);
+
+  /// Settings › Photos footer while Watch Camera Roll is on (and the snackbar when it is turned on): the own server's saved address is not https://, so the automatic scan does not run at all (no photo is read). A photo added by hand is still tried and gets errServerNeedsHttps.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic logging is not running: your server address does not start with https://, and Chopstats sends nothing to it. Change it in AI Provider › Your own server.'**
+  String get autoScanNeedsHttps;
+
+  /// Test AI provider › Recent background scans: how a run ended when the own server's address is not https:// (nothing was read or sent).
+  ///
+  /// In en, this message translates to:
+  /// **'Not run: the server address does not start with https://.'**
+  String get diagBgStopNeedsHttps;
 }
 
 class _AppLocalizationsDelegate

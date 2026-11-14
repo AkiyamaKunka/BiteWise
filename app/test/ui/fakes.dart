@@ -11,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:calorie_tracker/core/ai_consent.dart'
     show aiConsentWordingVersion, allAiConsentRoutes;
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/server_transport.dart'
+    show serverAddressRefused;
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/usual/usual_foods.dart'
     show UsualChoices, UsualFoods;
@@ -140,7 +142,11 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   @override
   bool get canAnalyze => apiKey.trim().isNotEmpty && !isQuotaPaused;
   @override
-  bool get canAutoAnalyze => canAnalyze && autoScanBlockedKind == null;
+  bool get canAutoAnalyze =>
+      canAnalyze &&
+      autoScanBlockedKind == null &&
+      // As AppSettings.autoAnalysisNeedsHttps.
+      !(provider == 'server' && serverAddressRefused(serverBaseUrl));
   @override
   String? autoScanBlockedKind;
   @override

@@ -3699,4 +3699,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String diagBackupSizeLine(String size) {
     return 'About $size for Android\'s own backup, which keeps at most 25 MB per app.';
   }
+
+  @override
+  String get autoScanNeedsHttps =>
+      'Automatic logging is not running: your server address does not start with https://, and Chopstats sends nothing to it. Change it in AI Provider › Your own server.';
+
+  @override
+  String get diagBgStopNeedsHttps =>
+      'Not run: the server address does not start with https://.';
 }

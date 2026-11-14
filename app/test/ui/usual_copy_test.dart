@@ -160,12 +160,13 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
 /// (leftoverLoadFailed, leftoverSaveFailed), then the Android privacy
-/// lane's (android/privacy), 21: ten https-only own-server lines
+/// lane's (android/privacy), 23: ten https-only own-server lines
 /// (serverHttpConsentNote … diagFixServerHttps), shareConsentDeclinedMany,
 /// Export's six Save to Device lines (exportSheetTitle … exportSaveFailed),
 /// settingsHealthReminder, and the Android backup-size lines
-/// (backupSizeNearLimit, diagBackupSizeTitle, diagBackupSizeLine).
-const _keyCount = 911;
+/// (backupSizeNearLimit, diagBackupSizeTitle, diagBackupSizeLine), then
+/// the review's autoScanNeedsHttps and diagBgStopNeedsHttps.
+const _keyCount = 913;
 
 Directory _appRoot() {
   var dir = Directory.current;

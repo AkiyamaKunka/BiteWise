@@ -1028,5 +1028,7 @@
   "settingsHealthReminder": "筷拍不提供医疗建议。涉及健康或饮食的决定，请咨询医疗专业人士。",
   "backupSizeNearLimit": "这里的数据有 {size}。Android 自带的备份对每个应用最多保存 25 MB，超过后会停止备份，也不会提示你：请用「导出数据」→「保存到设备…」留一份副本。",
   "diagBackupSizeTitle": "Android 备份",
-  "diagBackupSizeLine": "Android 自带的备份大约要保存 {size}，它对每个应用最多保存 25 MB。"
+  "diagBackupSizeLine": "Android 自带的备份大约要保存 {size}，它对每个应用最多保存 25 MB。",
+  "autoScanNeedsHttps": "自动记录没有运行：你的服务器地址不是以 https:// 开头的，筷拍不会向它发送任何内容。请到「AI 服务」›「你自己的服务器」修改地址。",
+  "diagBgStopNeedsHttps": "没有运行：服务器地址不是以 https:// 开头的。"
 }

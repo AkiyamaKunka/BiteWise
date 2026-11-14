@@ -476,7 +476,9 @@ Future<bool> headlessBackfillWith({
   if (!settings.canAutoAnalyze) {
     await recorder?.finish((settings.activeApiKey ?? '').trim().isEmpty
         ? BackgroundStop.noKey
-        : BackgroundStop.paused);
+        : settings.autoAnalysisNeedsHttps
+            ? BackgroundStop.needsHttps
+            : BackgroundStop.paused);
     return true;
   }
   // iCloud Backup (1.7.0): a restore offer is open or a restore is

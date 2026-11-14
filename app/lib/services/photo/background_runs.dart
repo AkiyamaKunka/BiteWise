@@ -50,6 +50,10 @@ abstract final class BackgroundStop {
   static const budget = 'budget';
   static const paused = 'paused';
   static const noKey = 'no_key';
+
+  /// The own server's address is not https://: the app sends it nothing,
+  /// so the scan did not run (AppSettings.autoAnalysisNeedsHttps).
+  static const needsHttps = 'needs_https';
   static const watcherOff = 'watcher_off';
   static const noPermission = 'no_permission';
   static String error(Object e) => 'error:${e.runtimeType}';
@@ -259,6 +263,7 @@ bool backgroundScanLooksStuck(List<BackgroundRunRecord> runs,
 const _guardStops = {
   BackgroundStop.watcherOff,
   BackgroundStop.noKey,
+  BackgroundStop.needsHttps,
   BackgroundStop.paused,
   BackgroundStop.noPermission,
 };

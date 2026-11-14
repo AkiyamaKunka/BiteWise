@@ -571,6 +571,7 @@ String backgroundRunVerdict(AppLocalizations l, BackgroundRunRecord r) {
     BackgroundStop.budget => l.diagBgStopBudget,
     BackgroundStop.paused => l.diagBgStopPaused,
     BackgroundStop.noKey => l.diagBgStopNoKey,
+    BackgroundStop.needsHttps => l.diagBgStopNeedsHttps,
     BackgroundStop.watcherOff => l.diagBgStopWatcherOff,
     BackgroundStop.noPermission => l.diagBgStopNoPermission,
     _ => l.diagBgStopError(

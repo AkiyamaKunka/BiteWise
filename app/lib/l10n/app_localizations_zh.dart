@@ -3328,4 +3328,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String diagBackupSizeLine(String size) {
     return 'Android 自带的备份大约要保存 $size，它对每个应用最多保存 25 MB。';
   }
+
+  @override
+  String get autoScanNeedsHttps =>
+      '自动记录没有运行：你的服务器地址不是以 https:// 开头的，筷拍不会向它发送任何内容。请到「AI 服务」›「你自己的服务器」修改地址。';
+
+  @override
+  String get diagBgStopNeedsHttps => '没有运行：服务器地址不是以 https:// 开头的。';
 }

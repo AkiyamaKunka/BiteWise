@@ -14,6 +14,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/ai_consent.dart';
+import '../../core/server_transport.dart' show serverAddressRefused;
 import '../../core/shared_generated.dart';
 
 /// Narrow seam over the secure-storage plugin so tests can substitute an
@@ -1213,9 +1214,20 @@ class AppSettings extends ChangeNotifier {
 
   /// [canAnalyze] for the AUTOMATIC scan (watcher, launch/resume catch-up,
   /// background run): also false while the automatic-analysis latch below
-  /// is armed. Deliberate adds (picker, share, 照片覆盖检查) keep using
-  /// [canAnalyze] — a deliberate photo is how the user checks the fix.
-  bool get canAutoAnalyze => canAnalyze && !isAnalysisBlocked;
+  /// is armed, and while [autoAnalysisNeedsHttps]. Deliberate adds (picker,
+  /// share, 照片覆盖检查) keep using [canAnalyze] — a deliberate photo is
+  /// how the user checks the fix, and it is told why.
+  bool get canAutoAnalyze =>
+      canAnalyze && !isAnalysisBlocked && !autoAnalysisNeedsHttps;
+
+  /// The own server is the provider and its saved address is one the app
+  /// sends nothing to (core/server_transport.dart: not https:// while the
+  /// switch is on). Every automatic scan would read, hash and reserve the
+  /// whole window only for each photo to be refused and released, every
+  /// resume, library change and background run (review of the privacy
+  /// lane, finding 1): the scan does not run, and Settings says why.
+  bool get autoAnalysisNeedsHttps =>
+      _provider == AiProvider.server && serverAddressRefused(_serverBaseUrl);
 
   /// How long a refusal parks the automatic scan. A rejected key stays
   /// rejected until the user edits it (which clears the latch at once);
