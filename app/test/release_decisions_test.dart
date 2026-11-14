@@ -177,6 +177,18 @@ final _cjk = RegExp(r'[⺀-鿿豈-﫿＀-￯　-〿]');
 int _playLength(String fileText) =>
     fileText.replaceFirst(RegExp(r'\n$'), '').runes.length;
 
+/// (width, height, bit depth, colour type) from a PNG's IHDR chunk; colour
+/// type 6 is RGBA (with 8-bit depth: "32-bit"), 2 is RGB ("24-bit").
+(int, int, int, int) _pngHeader(File file) {
+  final b = file.readAsBytesSync();
+  expect(b.sublist(0, 8), [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A],
+      reason: '${file.path} is not a PNG');
+  expect(String.fromCharCodes(b.sublist(12, 16)), 'IHDR', reason: file.path);
+  int u32(int at) =>
+      (b[at] << 24) | (b[at + 1] << 16) | (b[at + 2] << 8) | b[at + 3];
+  return (u32(16), u32(20), b[24], b[25]);
+}
+
 void main() {
   group('R-F8: App Privacy answer B in the manifests', () {
     test('the plist reader reads what it should', () {
@@ -731,6 +743,30 @@ void main() {
       expect(text,
           contains("a prominent in-app disclosure and the user's consent"));
     });
+  });
+
+  group('Play graphics, the themed icon and the Android 12+ splash', () {
+    test('icon-512 is a 512 x 512 32-bit PNG of at most 1024 KB', () {
+      final icon =
+          File('${_appRoot().path}/android/store/graphics/icon-512.png');
+      expect(_pngHeader(icon), (512, 512, 8, 6));
+      expect(icon.lengthSync(), lessThanOrEqualTo(1024 * 1024));
+    });
+
+    test('the feature graphics are 1024 x 500 24-bit PNGs, no alpha', () {
+      for (final name in ['feature-graphic.png', 'feature-graphic-zh-CN.png']) {
+        final f = File('${_appRoot().path}/android/store/graphics/$name');
+        expect(_pngHeader(f), (1024, 500, 8, 2), reason: name);
+      }
+    });
+
+    test('the shot list asks for what Play accepts', () {
+      final shots = _read('android/store/screenshots/SHOTS.md')
+          .replaceAll(RegExp(r'\s+'), ' ');
+      expect(shots, contains('at least 4 portrait shots, 9:16, 1080×1920'));
+      expect(shots, contains('24-bit PNG with no alpha'));
+    });
+
   });
 
 }
