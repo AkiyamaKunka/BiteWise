@@ -5465,7 +5465,7 @@ abstract class AppLocalizations {
   /// **'Discard changes?'**
   String get discardChangesTitle;
 
-  /// No description provided for @discardChangesBody.
+  /// Discard-changes dialog body, under discardChangesTitle: why the question is asked. The typing is kept on Keep editing, dropped on Discard.
   ///
   /// In en, this message translates to:
   /// **'What you changed here has not been saved.'**
@@ -5474,7 +5474,7 @@ abstract class AppLocalizations {
   /// Discard-changes dialog: stays on the screen with the typing kept.
   ///
   /// In en, this message translates to:
-  /// **'Keep Editing'**
+  /// **'Keep editing'**
   String get discardChangesKeep;
 
   /// Discard-changes dialog: closes the screen and drops the unsaved typing (destructive style).

@@ -89,7 +89,7 @@ Future<void> _systemBackBusy(WidgetTester tester) async {
 
 void main() {
   group('Edit meal', () {
-    testWidgets('back with an edit asks; Keep Editing stays with the typing',
+    testWidgets('back with an edit asks; Keep editing stays with the typing',
         (tester) async {
       final dao = FakeDao()..seed(_meal());
       await _push(tester,
@@ -101,6 +101,9 @@ void main() {
       await _systemBack(tester);
       expect(find.byKey(_dialog), findsOneWidget);
       expect(find.text('Discard changes?'), findsOneWidget);
+      // Sentence case, like 'Not now' (review 2026-11-13).
+      expect(find.text('Keep editing'), findsOneWidget);
+      expect(find.text('Discard'), findsOneWidget);
 
       await tester.tap(find.byKey(_keep));
       await tester.pumpAndSettle();
@@ -687,7 +690,7 @@ void main() {
       expect(result, isTrue);
     });
 
-    testWidgets('Keep Editing and a tap outside both stay', (tester) async {
+    testWidgets('Keep editing and a tap outside both stay', (tester) async {
       await pushGuarded(tester);
       await _systemBack(tester);
       await tester.tap(find.byKey(_keep));

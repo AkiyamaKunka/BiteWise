@@ -3627,7 +3627,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get discardChangesBody => 'What you changed here has not been saved.';
 
   @override
-  String get discardChangesKeep => 'Keep Editing';
+  String get discardChangesKeep => 'Keep editing';
 
   @override
   String get discardChangesDiscard => 'Discard';
