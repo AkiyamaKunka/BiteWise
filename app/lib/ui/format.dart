@@ -191,14 +191,24 @@ String friendlyHistoryDay(String date,
 /// The phone's own 12/24-hour setting (Android's 'Use 24-hour format',
 /// iOS's 24-Hour Time), as Flutter reports it: the same value
 /// MediaQuery.alwaysUse24HourFormat carries, read here for code without a
-/// BuildContext. A headless background engine has no view and reads false.
+/// BuildContext.
+///
+/// A headless engine (the background scan's) has no view on screen, and
+/// its reading is the platform default, not the phone's (Android reports
+/// 12-hour there): with no view, or a view of no size yet, this is true —
+/// the 24-hour clock the background pause notice always had (review
+/// 2026-11-13).
 bool phoneUses24HourClock() {
+  ui.PlatformDispatcher dispatcher;
   try {
-    return WidgetsBinding.instance.platformDispatcher.alwaysUse24HourFormat;
+    dispatcher = WidgetsBinding.instance.platformDispatcher;
   } catch (_) {
     // No binding yet (a plain unit test or an early isolate).
-    return ui.PlatformDispatcher.instance.alwaysUse24HourFormat;
+    dispatcher = ui.PlatformDispatcher.instance;
   }
+  final view = dispatcher.implicitView;
+  if (view == null || view.physicalSize.isEmpty) return true;
+  return dispatcher.alwaysUse24HourFormat;
 }
 
 /// A time of day for an English reader: '9:30 PM' (no leading zero, the

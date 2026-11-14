@@ -56,6 +56,32 @@ void main() {
       }
     });
 
+    // Review 2026-11-13: the background scan's pause notice is built in
+    // the headless engine, which has no view on screen and reads the
+    // platform default (12-hour on Android), not the phone's setting. No
+    // view: the 24-hour clock it always had.
+    testWidgets('with no view on screen (headless) it stays 24-hour',
+        (tester) async {
+      addTearDown(
+          tester.platformDispatcher.clearAlwaysUse24HourTestValue);
+      addTearDown(tester.view.reset);
+      tester.platformDispatcher.alwaysUse24HourFormatTestValue = false;
+      tester.view.physicalSize = Size.zero;
+      expect(phoneUses24HourClock(), isTrue);
+      expect(dayTimeLabel(en, DateTime(2026, 7, 17, 21, 30), now: now),
+          'Today 21:30');
+      expect(
+          autoScanPausedLine(en,
+              kind: 'rejectedKey',
+              until: DateTime(2026, 7, 18, 7),
+              provider: 'gemini',
+              serverBackend: 'claude',
+              now: now),
+          contains('Tomorrow 07:00'));
+      tester.view.reset();
+      expect(phoneUses24HourClock(), isFalse, reason: 'a view: the phone');
+    });
+
     testWidgets('by default it follows the phone', (tester) async {
       addTearDown(
           tester.platformDispatcher.clearAlwaysUse24HourTestValue);
