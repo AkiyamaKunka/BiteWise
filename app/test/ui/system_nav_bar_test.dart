@@ -3,9 +3,11 @@
 // under the dark app, and the reverse (UX run screenshots 57-59; a cold
 // start was fine, 58). MainActivity handles uiMode itself, so the window
 // kept its launch-time bar, and the app never set a navigation-bar style.
-// The shell now styles the bar from the theme it shows; the status bar
-// stays with the app bars. iPhone has no such bar and gets no style.
+// The shell now styles the bar from the theme it shows (the tab bar's
+// opaque colour, buttons in its contrast); the status bar stays with the
+// app bars. iPhone has no such bar and gets no style.
 import 'package:calorie_tracker/ui/app.dart';
+import 'package:calorie_tracker/ui/theme/tokens.dart' show AppColors;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,7 +27,15 @@ void main() {
     expect(style.systemNavigationBarIconBrightness,
         theme == Brightness.dark ? Brightness.light : Brightness.dark,
         reason: 'buttons readable on the $theme app');
-    expect(style.systemNavigationBarColor, _transparent);
+    // Opaque, the tab bar's own colour: below Android 15 the app does not
+    // draw under the bar, so a transparent one showed the window colour
+    // fixed at launch (MainActivity handles uiMode itself) under buttons
+    // that followed the new theme: light buttons on a white bar (review
+    // 2026-11-13). Android 15+ draws edge to edge and ignores the colour.
+    final chrome = (theme == Brightness.dark ? AppColors.dark : AppColors.light)
+        .chrome;
+    expect(style.systemNavigationBarColor, chrome);
+    expect(style.systemNavigationBarColor!.a, 1.0, reason: 'opaque');
     expect(style.systemNavigationBarDividerColor, _transparent);
     expect(style.systemNavigationBarContrastEnforced, isFalse);
   }

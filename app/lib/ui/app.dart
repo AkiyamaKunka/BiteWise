@@ -56,10 +56,13 @@ class _AppleScrollBehavior extends MaterialScrollBehavior {
 /// runs kept the launch theme's bar: with 3-button navigation, a light bar
 /// under the dark app and dark buttons on a dark bar after switching back
 /// (UX run screenshots 57-59). Only the navigation-bar fields are set; the
-/// status-bar ones stay null, so the app bars keep them. The bar is
-/// transparent over the app's own tab bar (edge to edge), with the
-/// system's contrast scrim off and the buttons in the theme's contrast.
-/// iPhone has no such bar: nothing is set there.
+/// status-bar ones stay null, so the app bars keep them. The bar takes the
+/// tab bar's own opaque colour (chrome), with the buttons in its contrast
+/// and the system's contrast scrim off. Not transparent: below Android 15
+/// the app does not draw under the bar, so a transparent one showed the
+/// window colour fixed at launch under buttons that followed the new theme
+/// (review 2026-11-13); Android 15+ draws edge to edge and ignores the
+/// colour. iPhone has no such bar: nothing is set there.
 class _SystemNavBarStyle extends StatelessWidget {
   const _SystemNavBarStyle({required this.child});
   final Widget child;
@@ -71,7 +74,7 @@ class _SystemNavBarStyle extends StatelessWidget {
     final dark = theme.brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
-        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarColor: context.colors.chrome,
         systemNavigationBarDividerColor: Colors.transparent,
         systemNavigationBarIconBrightness:
             dark ? Brightness.light : Brightness.dark,
