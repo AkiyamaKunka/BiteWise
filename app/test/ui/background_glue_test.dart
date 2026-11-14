@@ -26,6 +26,7 @@ import 'package:calorie_tracker/services/local_store.dart';
 import 'package:calorie_tracker/services/photo/photo_changes.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/watcher.dart';
+import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/refresh_signal.dart';
@@ -2228,6 +2229,108 @@ void main() {
     });
   });
 
+  // Review (finding 3): the run loads its settings at its start and arms
+  // the summary at its end, up to 9 minutes later; a summary switched off
+  // or moved in the open app meanwhile was armed back as it was.
+  group('the run re-arms the summary with the settings as they are now', () {
+    Future<(AppSettings, SharedPreferences)> loaded(
+        Map<String, Object> values) async {
+      SharedPreferences.setMockInitialValues(values);
+      final prefs = await SharedPreferences.getInstance();
+      return (
+        await AppSettings.load(prefs: prefs, keyStore: MemoryKeyStore()),
+        prefs
+      );
+    }
+
+    final at = DateTime(2026, 11, 13, 19, 0); // a Friday
+    late List<(int, String, DateTime)> armed;
+    late List<int> cancelled;
+    late ReportNotifier notifier;
+
+    setUp(() {
+      armed = [];
+      cancelled = [];
+      notifier = ReportNotifier(
+        presenter: (_, _, _) async {},
+        scheduler: (id, title, _, when, _) async => armed.add((id, title, when)),
+        canceller: (id) async => cancelled.add(id),
+        pendingIds: () async => const [],
+        pendingPayloads: () async => const {},
+      );
+    });
+
+    Future<void> rearm(AppSettings s, SharedPreferences prefs,
+            {bool ios = false}) =>
+        rearmSummaryAfterRun(
+            prefs: prefs,
+            settings: s,
+            notifier: notifier,
+            openDao: () async => FakeDao(),
+            ios: ios,
+            now: () => at);
+
+    test('switched off in the app mid-run: withdrawn, nothing armed',
+        () async {
+      final (s, prefs) = await loaded({'settings.summary_enabled': true});
+      SharedPreferences.setMockInitialValues(
+          {'settings.summary_enabled': false}); // the open app's write
+      await rearm(s, prefs);
+      expect(armed, isEmpty);
+      expect(cancelled, ReportNotifier.dailySetIds);
+      expect(s.summaryEnabled, isTrue, reason: 'the run\'s copy is stale');
+    });
+
+    test('moved, with a new goal and language: armed as they are now',
+        () async {
+      final (s, prefs) = await loaded({'settings.report_time': '21:30'});
+      SharedPreferences.setMockInitialValues({
+        'settings.report_time': '20:00',
+        'settings.app_language': 'zh',
+        'settings.calorie_goal': 1800,
+      });
+      await rearm(s, prefs);
+      expect(armed.first.$3, DateTime(2026, 11, 13, 20, 0));
+      expect(armed.first.$2, '周五：0 千卡');
+      expect(armed, hasLength(ReportNotifier.dailySetSize));
+    });
+
+    test('iOS too, one card', () async {
+      final (s, prefs) = await loaded({'settings.report_time': '21:30'});
+      SharedPreferences.setMockInitialValues({'settings.report_time': '22:15'});
+      await rearm(s, prefs, ios: true);
+      expect(armed.single.$3, DateTime(2026, 11, 13, 22, 15));
+    });
+
+    test('a store that cannot be read: the run\'s own copy', () async {
+      final (s, _) = await loaded({'settings.report_time': '21:30'});
+      await rearm(s, _ThrowingPrefs());
+      expect(armed.first.$3, DateTime(2026, 11, 13, 21, 30));
+    });
+  });
+
+  // Review (finding 10): a run cut at Android's 9-minute deadline used to
+  // skip the re-arm, which sits at the run's end.
+  group('RunInFlight.endAtDeadline (Android)', () {
+    test('releases the photo in flight, then re-arms the summary', () async {
+      final order = <String>[];
+      final run = RunInFlight(deadline: DateTime(2026, 11, 13, 21, 9))
+        ..rearm = () async => order.add('rearm');
+      await run.endAtDeadline();
+      expect(order, ['rearm'], reason: 'no pipeline yet: nothing to release');
+    });
+
+    test('a re-arm not set yet (the settings never loaded): nothing',
+        () async {
+      await expectLater(RunInFlight().endAtDeadline(), completes);
+    });
+
+    test('a failing re-arm is not a throw: the reply still goes', () async {
+      final run = RunInFlight()..rearm = () async => throw StateError('db');
+      await expectLater(run.endAtDeadline(), completes);
+    });
+  });
+
   group('HomeShell daily-card re-arm', () {
     // The OS-scheduled summary (both phones) carries content computed at
     // ARM time, so the shell must re-arm on every moment content can
@@ -2767,4 +2870,10 @@ class _Library implements PhotoLibrary {
   Future<void> stopChangeNotify() async {}
 
   _Asset _reading(_Asset a) => a..onRead = () => reads.add(a.id);
+}
+
+/// SharedPreferences whose reload fails, as an unreadable store would.
+class _ThrowingPrefs extends Fake implements SharedPreferences {
+  @override
+  Future<void> reload() async => throw StateError('store unreadable');
 }

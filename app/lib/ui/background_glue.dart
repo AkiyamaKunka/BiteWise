@@ -721,8 +721,18 @@ Future<bool> runHeadlessBackfill({
   return finishWithinGrant(run,
       left: startedAt.add(runDeadline).difference(clock()),
       recorder: recorder,
-      abandon: inFlight.abandon);
+      abandon: ios ? inFlight.abandon : inFlight.endAtDeadline,
+      abandonLimit: ios ? iosAbandonLimit : androidDeadlineWrapUp);
 }
+
+/// How long iOS's deadline waits for the photo in flight to be released
+/// before replying ([finishWithinGrant]).
+const Duration iosAbandonLimit = Duration(milliseconds: 1500);
+
+/// How long Android's deadline waits for the release and the summary's
+/// re-arm ([RunInFlight.endAtDeadline]): inside the minute between
+/// [androidRunDeadline] and WorkManager's 10-minute stop.
+const Duration androidDeadlineWrapUp = Duration(seconds: 30);
 
 /// How long a photo must have had to itself, before the run's deadline,
 /// for a cut-off to count against it ([DeferredAssets.cutOff]): offered no
@@ -746,6 +756,24 @@ class RunInFlight {
   PhotoPipeline? pipeline;
   DeferredAssets? deferred;
   DateTime? _offeredAt;
+
+  /// The summary's re-arm ([rearmSummaryAfterRun]), set once the run has
+  /// its settings and notifier: Android's deadline runs it
+  /// ([endAtDeadline]).
+  Future<void> Function()? rearm;
+
+  /// Android's end at [androidRunDeadline]: the photo in flight released
+  /// ([abandon]), then the summary re-armed — the run's own re-arm sits at
+  /// its end, which a run cut short never reaches (review, 2026-11-13).
+  /// Never throws: the reply to WorkManager matters more.
+  Future<void> endAtDeadline() async {
+    try {
+      await abandon();
+    } catch (_) {}
+    try {
+      await rearm?.call();
+    } catch (_) {}
+  }
 
   /// A photo was handed to the pipeline: the one in flight from now on
   /// (the background pipeline takes one photo at a time).
@@ -813,6 +841,14 @@ Future<bool> _runAfterLaunch({
           mealNotificationChannelFor(settings.appLanguage),
       mealCardIdSeed: 10000 +
           (DateTime.now().millisecondsSinceEpoch ~/ 10000) % 8640000);
+  // After the scan (below) — or at Android's deadline, should the scan
+  // still be going then (RunInFlight.endAtDeadline).
+  inFlight.rearm = () => rearmSummaryAfterRun(
+      prefs: prefs,
+      settings: settings,
+      notifier: notifier,
+      openDao: createMealsDao,
+      ios: ios);
   final bool ok;
   try {
     ok = await headlessBackfillWith(
@@ -859,17 +895,9 @@ Future<bool> _runAfterLaunch({
     await recorder.finish(BackgroundStop.error(e));
     rethrow;
   }
-  try {
-    // Android: the week ahead, and a card still pending past its slot (the
-    // inexact alarm runs late) posted rather than replaced.
-    await armOsDailySummary(
-        dao: await createMealsDao(),
-        settings: settings,
-        notifier: notifier,
-        android: !ios);
-  } catch (_) {
-    // The scan's work is saved either way; the card refreshes next open.
-  }
+  // The scan's work is saved either way; a failed re-arm is refreshed at
+  // the next open (rearmSummaryAfterRun never throws).
+  await inFlight.rearm!();
   if (ios) {
     // iCloud Backup (1.7.0): only a backup this install already owns, only
     // if something changed, with at least 8 s left before the deadline;
@@ -885,6 +913,61 @@ Future<bool> _runAfterLaunch({
     }
   }
   return ok;
+}
+
+/// No key store for [summarySettingsNow]'s read: it reads the summary's
+/// settings, which live in preferences, never a key.
+class _NoKeys implements SecureKeyStore {
+  const _NoKeys();
+  @override
+  Future<String?> read(String key) async => null;
+  @override
+  Future<void> write(String key, String value) async {}
+  @override
+  Future<void> delete(String key) async {}
+}
+
+/// The settings as the open app may have changed them since this run
+/// loaded its own — up to [androidRunDeadline] earlier: the summary's
+/// switch, time, goal and language among them (review, 2026-11-13; the
+/// precedent is AppSettings.reloadAiConsent). Read again from disk through
+/// AppSettings' own loader, which only reads (its one possible write, the
+/// one-time consent seed, depends on the provider alone and is written by
+/// the first load), with no key store: the keys stay out of it. The run's
+/// own copy when the store cannot be read.
+@visibleForTesting
+Future<AppSettings> summarySettingsNow(
+    SharedPreferences prefs, AppSettings loaded) async {
+  try {
+    await prefs.reload();
+    return await AppSettings.load(prefs: prefs, keyStore: const _NoKeys());
+  } catch (_) {
+    return loaded;
+  }
+}
+
+/// The run's re-arm of the summary card, on both platforms, with the
+/// settings as they are now ([summarySettingsNow]); on Android the week
+/// ahead and a card still pending past its slot (os_summary.dart). Never
+/// throws: the scan's work is saved either way, and the next open re-arms.
+@visibleForTesting
+Future<void> rearmSummaryAfterRun({
+  required SharedPreferences prefs,
+  required AppSettings settings,
+  required ReportNotifier notifier,
+  required Future<MealsDao> Function() openDao,
+  required bool ios,
+  DateTime Function() now = DateTime.now,
+}) async {
+  try {
+    await armOsDailySummary(
+        dao: await openDao(),
+        settings: await summarySettingsNow(prefs, settings),
+        notifier: notifier,
+        now: now,
+        android: !ios,
+        prefs: () async => prefs);
+  } catch (_) {}
 }
 
 /// The whole iOS background run, from its start ([backgroundRunStart]),
@@ -916,6 +999,11 @@ const Duration iosRunDeadline = Duration(seconds: 22);
 /// ([androidBackgroundBudget]). Android 16's job quotas can stop a run
 /// sooner still; the next run labels that one
 /// ([BackgroundStop.stoppedBySystem]).
+///
+/// Counted from the run's entry into Dart: Android writes no native launch
+/// stamp, so the engine's boot before it is not counted; the minute short
+/// of the stop covers it, and the deadline's own wrap-up
+/// ([androidDeadlineWrapUp]).
 const Duration androidRunDeadline = Duration(minutes: 9);
 
 /// [run] or, once [left] has passed, an end to the run anyway: the

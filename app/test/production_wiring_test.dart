@@ -816,14 +816,18 @@ void main() {
         'nothing itself', () {
       final glue = _source('lib/ui/background_glue.dart');
       final after = _body(glue, 'Future<bool> _runAfterLaunch({');
+      // The re-arm itself (fresh settings, both platforms) is behaviour-
+      // tested through rearmSummaryAfterRun; here, that the run uses it,
+      // after the scan, and hands it to Android's deadline.
       expect(
         after,
         _wired(
-          r'\n  try \{\s*(//[^\n]*\n\s*)*await armOsDailySummary\( '
-          r'dao: await createMealsDao\(\), settings: settings, '
-          r'notifier: notifier, android: !ios\);',
+          r'inFlight\.rearm = \(\) => rearmSummaryAfterRun\( prefs: prefs, '
+          r'settings: settings, notifier: notifier, openDao: createMealsDao, '
+          r'ios: ios\);',
         ),
       );
+      expect(after, _wired(r'\n  await inFlight\.rearm!\(\);'));
       expect(glue, isNot(contains('postHeadlessSummary')));
       expect(glue, isNot(contains('maybePostDailySummary')));
       expect(glue, isNot(contains('showDailySummary')));
@@ -885,7 +889,9 @@ void main() {
         launch(),
         _wired(
           r'return finishWithinGrant\(run, left: startedAt\.add\(runDeadline\)'
-          r'\.difference\(clock\(\)\), recorder: recorder, abandon: inFlight\.abandon\);',
+          r'\.difference\(clock\(\)\), recorder: recorder, '
+          r'abandon: ios \? inFlight\.abandon : inFlight\.endAtDeadline, '
+          r'abandonLimit: ios \? iosAbandonLimit : androidDeadlineWrapUp\);',
         ),
       );
       expect(launch(), isNot(contains('if (!ios) return run;')));
