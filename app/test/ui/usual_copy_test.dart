@@ -159,8 +159,11 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// bodyDeleteFailed) and the coverage window slider's screen-reader name
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
-/// (leftoverLoadFailed, leftoverSaveFailed).
-const _keyCount = 890;
+/// (leftoverLoadFailed, leftoverSaveFailed), then Android's system photo
+/// picker (addChooseAllPhotos, addPickerNote, addPickerUnavailable) and
+/// the note for a photo older than the dating window
+/// (addOldPhotoLoggedToday).
+const _keyCount = 894;
 
 Directory _appRoot() {
   var dir = Directory.current;
