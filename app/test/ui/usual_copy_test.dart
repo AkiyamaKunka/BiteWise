@@ -159,14 +159,17 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// bodyDeleteFailed) and the coverage window slider's screen-reader name
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
-/// (leftoverLoadFailed, leftoverSaveFailed), then the Android privacy
-/// lane's (android/privacy), 23: ten https-only own-server lines
+/// (leftoverLoadFailed, leftoverSaveFailed), then Android's system photo
+/// picker (addChooseAllPhotos, addPickerNote, addPickerUnavailable) and
+/// the note for a photo older than the dating window
+/// (addOldPhotoLoggedToday), then the Android privacy lane's
+/// (android/privacy), 23: ten https-only own-server lines
 /// (serverHttpConsentNote … diagFixServerHttps), shareConsentDeclinedMany,
 /// Export's six Save to Device lines (exportSheetTitle … exportSaveFailed),
 /// settingsHealthReminder, and the Android backup-size lines
 /// (backupSizeNearLimit, diagBackupSizeTitle, diagBackupSizeLine), then
 /// the review's autoScanNeedsHttps and diagBgStopNeedsHttps.
-const _keyCount = 913;
+const _keyCount = 917;
 
 Directory _appRoot() {
   var dir = Directory.current;

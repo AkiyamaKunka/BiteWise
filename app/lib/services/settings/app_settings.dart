@@ -39,6 +39,76 @@ class FlutterSecureKeyStore implements SecureKeyStore {
   Future<void> delete(String key) => _storage.delete(key: key);
 }
 
+/// Android's [SecureKeyStore]: the plain store, except that a key it
+/// cannot read is no key.
+///
+/// flutter_secure_storage keeps each key in a shared_prefs file, encrypted
+/// with a key that lives in this phone's Android Keystore. A copy of that
+/// file whose Keystore key is gone (restored or transferred onto another
+/// phone, or kept through an uninstall that keeps the app's data without
+/// it) can never be read again, and the plugin's resetOnError covers only
+/// its key-mismatch exceptions. Any other failure stopped
+/// [AppSettings.load], and the startup error's Retry could never succeed;
+/// now the app starts without that key and asks for it.
+///
+/// - Only the plugin's [PlatformException] is forgiven, after one retry.
+///   Anything else (a missing plugin, a bug) still fails the load.
+/// - The diagnostics line names the key and the error's type, never the
+///   value or the plugin's message.
+/// - What reaches here may also be a passing Keystore error with the
+///   stored key still good. So for the rest of this run a delete of a key
+///   whose read failed is skipped: the key field shows empty, and tapping
+///   out of it saves '' (a delete), which must never erase that key. A
+///   write still overwrites it, and a later good read ends the hold.
+/// - A failed write, or the delete of any other key, still throws.
+///
+/// Never on iOS, where a locked phone's failed read must propagate
+/// ([MigratingKeyStore]).
+class AndroidSecureKeyStore extends FlutterSecureKeyStore {
+  const AndroidSecureKeyStore();
+
+  /// The keys whose read failed in this engine's run, so a delete keeps
+  /// them. Per isolate: the background engine keeps its own (it never
+  /// deletes keys).
+  static final Set<String> _unreadable = {};
+
+  @visibleForTesting
+  static void debugForgetUnreadable() => _unreadable.clear();
+
+  @override
+  Future<String?> read(String key) async {
+    for (var attempt = 1;; attempt++) {
+      try {
+        final value = await super.read(key);
+        _unreadable.remove(key);
+        return value;
+      } on PlatformException catch (e) {
+        if (attempt < 2) continue;
+        _unreadable.add(key);
+        debugPrint('Settings: the stored $key could not be read '
+            '(${e.runtimeType}); treated as no key');
+        return null;
+      }
+    }
+  }
+
+  @override
+  Future<void> write(String key, String value) async {
+    await super.write(key, value);
+    _unreadable.remove(key);
+  }
+
+  @override
+  Future<void> delete(String key) async {
+    if (_unreadable.contains(key)) {
+      debugPrint('Settings: kept the stored $key, which could not be read '
+          'this run');
+      return;
+    }
+    await super.delete(key);
+  }
+}
+
 /// iOS keychain class for every credential: readable from the first unlock
 /// after a reboot onward, locked screen included. The BGAppRefresh photo
 /// scan usually runs in a pocket with the screen locked, and under the
@@ -54,8 +124,9 @@ const IOSOptions keychainIOSOptions =
 
 /// The store [AppSettings.load] uses when none is injected. On iOS it is
 /// [MigratingKeyStore] over the first_unlock keychain class, carrying the
-/// keys earlier builds saved under the plugin default; every other
-/// platform keeps the plain store, unchanged.
+/// keys earlier builds saved under the plugin default. Android gets the
+/// plain store whose reads forgive a broken store
+/// ([AndroidSecureKeyStore]); every other platform the plain store.
 ///
 /// [migrate] false is the BACKGROUND engine's store: it only reads (it
 /// never writes keys), so the one-time move has a single, sequential
@@ -68,7 +139,9 @@ SecureKeyStore platformKeyStore({bool migrate = true}) =>
             legacy: const FlutterSecureKeyStore(),
             migrate: migrate,
           )
-        : const FlutterSecureKeyStore();
+        : defaultTargetPlatform == TargetPlatform.android
+            ? const AndroidSecureKeyStore()
+            : const FlutterSecureKeyStore();
 
 /// Moves each key saved under the old keychain class ([legacy]) into the
 /// new one ([primary]) the first time it is read, without ever losing it.

@@ -32,6 +32,7 @@ import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart';
 import '../../core/server_transport.dart' show serverAddressRefused;
 import '../../services/photo/photo_hash.dart' show originalBytesMd5;
+import '../../services/photo/system_photo_picker.dart';
 import '../ai_consent.dart';
 import '../format.dart';
 import '../l10n.dart';
@@ -44,8 +45,14 @@ import '../widgets/grouped.dart';
 import '../widgets/states.dart';
 
 class LeftoverScreen extends StatefulWidget {
-  const LeftoverScreen({super.key, required this.services});
+  const LeftoverScreen({super.key, required this.services, this.systemPicker});
   final UiServices services;
+
+  /// Android's system Photo Picker, as on AddPhotoScreen: without full
+  /// photo access the photo step never asks for the library — it asks for
+  /// the AI consent and opens this picker for one photo. With full access
+  /// the grid stays, plus a row that opens the picker. Null on iOS.
+  final SystemPhotoPicker? systemPicker;
 
   @override
   State<LeftoverScreen> createState() => _LeftoverScreenState();
@@ -61,6 +68,15 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   bool _loadFailed = false;
   bool _analyzing = false;
   bool _permissionDenied = false;
+
+  /// Android without full access: the photo step is the system picker.
+  bool _pickerOnly = false;
+
+  /// Android with full access: the grid plus a row that opens the picker.
+  bool _pickerRow = false;
+
+  /// The picker could not open on this phone.
+  bool _pickerUnavailable = false;
   Future<List<RecentAsset>>? _assets;
   final Map<String, Future<Uint8List?>> _thumbs = {};
 
@@ -117,6 +133,33 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   }
 
   Future<List<RecentAsset>> _loadAssets() async {
+    final system = widget.systemPicker;
+    if (system == null) return _loadGrid();
+    // Play's photo policy: full access is read, never asked for (the Play
+    // build declares no photo permission; a request was a silent denial
+    // and the "isn't allowed" dead end).
+    final full = await system.hasBroadAccess();
+    if (!mounted) return const [];
+    if (full) {
+      _pickerRow = true;
+      return widget.services.picker.recentAssets();
+    }
+    _pickerOnly = true;
+    _openPickerAfterFrame();
+    return const [];
+  }
+
+  /// Opens the picker once the photo step is on screen (the consent
+  /// dialog needs the route).
+  void _openPickerAfterFrame() {
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) {
+        if (mounted && _selected != null) _pickPhoto(null);
+      })
+      ..ensureVisualUpdate();
+  }
+
+  Future<List<RecentAsset>> _loadGrid() async {
     final granted = await widget.services.requestPhotoPermission();
     if (!mounted) return const [];
     if (!granted) {
@@ -132,10 +175,14 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   void _selectMeal(Meal m) {
     _hold?.release();
     _hold = widget.services.mealInUse?.acquire(m.id);
+    // The picker is the photo step: it opens with each meal chosen (the
+    // first choice opens it from _loadAssets, once access is known).
+    final reopen = _pickerOnly && _assets != null;
     setState(() {
       _selected = m;
       _assets ??= _loadAssets();
     });
+    if (reopen) _openPickerAfterFrame();
   }
 
   void _clearSelection() {
@@ -153,7 +200,9 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   /// unseen one (pressure-test find).
   bool _busy = false;
 
-  Future<void> _pickPhoto(RecentAsset asset) async {
+  /// [asset] from the grid, or null: the system picker, after the consent
+  /// (Android).
+  Future<void> _pickPhoto(RecentAsset? asset) async {
     if (_busy) return;
     final meal = _selected;
     if (meal == null) return;
@@ -186,16 +235,25 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       _busy = false;
       return;
     }
-    setState(() => _analyzing = true);
     final services = widget.services;
     final l = context.l10n;
     try {
-      final photo = await services.picker.loadOriginal(asset);
-      if (!mounted) return;
-      if (photo == null) {
-        // Nothing was estimated: the add flow's words for the same photo.
-        _snack(l.addPhotoUnreadable);
-        return;
+      final IntakePhoto? photo;
+      if (asset == null) {
+        // The spinner only once a photo is chosen: the picker is its own
+        // screen, and a cancel analyzed nothing.
+        photo = await _systemPick();
+        if (photo == null || !mounted) return;
+        setState(() => _analyzing = true);
+      } else {
+        setState(() => _analyzing = true);
+        photo = await services.picker.loadOriginal(asset);
+        if (!mounted) return;
+        if (photo == null) {
+          // Nothing was estimated: the add flow's words for the same photo.
+          _snack(l.addPhotoUnreadable);
+          return;
+        }
       }
       final compact = compactOriginalAnalysis(meal.analysis);
       final reply =
@@ -376,6 +434,67 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     // pop THIS route by name, never 'whatever is topmost'.
     Navigator.of(context).pop(true);
   }
+
+  /// One photo from the system picker, or null (cancelled, unreadable or
+  /// unavailable, each said or shown here).
+  Future<IntakePhoto?> _systemPick() async {
+    final system = widget.systemPicker;
+    if (system == null) return null;
+    final pick = await system.pick(max: 1);
+    if (!mounted) return null;
+    switch (pick.status) {
+      case SystemPickStatus.unavailable:
+        // No library request here: on the Play build it could only fail.
+        // Over the grid the step's note is not on screen: a snackbar says it.
+        setState(() => _pickerUnavailable = true);
+        if (_pickerRow) _snack(context.l10n.addPickerUnavailable);
+        return null;
+      case SystemPickStatus.cancelled:
+      case SystemPickStatus.busy:
+        return null;
+      case SystemPickStatus.ok:
+        break;
+    }
+    if (pick.photos.isEmpty) {
+      if (pick.tooBig + pick.failed > 0) {
+        _snack(context.l10n.addPhotoUnreadable);
+      }
+      return null;
+    }
+    return pick.photos.first;
+  }
+
+  /// "Choose from all photos…".
+  Widget _pickerButton(AppLocalizations l) => FilledButton.tonalIcon(
+        key: const Key('leftoverChooseAllPhotos'),
+        onPressed: () => _pickPhoto(null),
+        icon: const Icon(Icons.photo_library_outlined),
+        label: Text(l.addChooseAllPhotos),
+      );
+
+  /// The photo step without the grid: what the picker is for and its
+  /// button, or why it cannot open.
+  Widget _pickerStep(AppLocalizations l) => Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: _pickerUnavailable
+                ? [
+                    Text(l.addPickerUnavailable,
+                        key: const Key('leftoverPickerUnavailable'),
+                        textAlign: TextAlign.center),
+                  ]
+                : [
+                    Text(l.addPickerNote,
+                        key: const Key('leftoverPickerNote'),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 16),
+                    _pickerButton(l),
+                  ],
+          ),
+        ),
+      );
 
   /// The deduction, compare-and-set (design R6a): the model's fractions
   /// applied to the meal as stored NOW, written only while it still holds
@@ -571,10 +690,13 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             final assets = snap.data!;
+            if (_pickerOnly || (_pickerRow && assets.isEmpty)) {
+              return _pickerStep(l);
+            }
             if (assets.isEmpty) {
               return Center(child: Text(l.addNoPhotos));
             }
-            return GridView.builder(
+            final grid = GridView.builder(
               padding: const EdgeInsets.all(16),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3, crossAxisSpacing: 6, mainAxisSpacing: 6),
@@ -612,6 +734,16 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
                 );
               },
             );
+            if (!_pickerRow) return grid;
+            return Column(children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: _pickerButton(l)),
+              ),
+              Expanded(child: grid),
+            ]);
           },
         );
     // At accessibility text sizes the chosen meal and the heading can take

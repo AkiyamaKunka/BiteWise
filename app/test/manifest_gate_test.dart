@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
@@ -53,6 +54,149 @@ String _pbxObject(
   return match!.group(1)!;
 }
 
+String _mainActivity() => File('${_appRoot().path}/android/app/src/main/'
+        'kotlin/dev/calorietracker/calorie_tracker/MainActivity.kt')
+    .readAsStringSync();
+
+String _intakeRules() => File('${_appRoot().path}/android/app/src/main/'
+        'kotlin/dev/calorietracker/calorie_tracker/IntakeRules.kt')
+    .readAsStringSync();
+
+/// [kotlin] with its comments removed (string literals kept) and every run
+/// of whitespace collapsed to one space, so a pin matches code only: a
+/// commented-out line no longer satisfies it, and a reflow breaks nothing.
+String _kotlinCode(String kotlin) {
+  final out = StringBuffer();
+  var i = 0;
+  String? quote;
+  while (i < kotlin.length) {
+    final c = kotlin[i];
+    if (quote != null) {
+      out.write(c);
+      if (c == r'\' && i + 1 < kotlin.length) {
+        out.write(kotlin[i + 1]);
+        i += 2;
+        continue;
+      }
+      if (c == quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c == '"' || c == "'") {
+      quote = c;
+      out.write(c);
+      i++;
+      continue;
+    }
+    if (kotlin.startsWith('//', i)) {
+      final end = kotlin.indexOf('\n', i);
+      i = end < 0 ? kotlin.length : end;
+      continue;
+    }
+    if (kotlin.startsWith('/*', i)) {
+      final end = kotlin.indexOf('*/', i + 2);
+      i = end < 0 ? kotlin.length : end + 2;
+      continue;
+    }
+    out.write(c);
+    i++;
+  }
+  return out.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+/// The braced body of the function whose declaration starts with
+/// [declaration] in [code] (from [_kotlinCode]), braces included; '' for
+/// an expression body. Fails when the declaration is missing or repeated.
+String _kotlinFunction(String code, String declaration) {
+  expect(declaration.allMatches(code), hasLength(1), reason: declaration);
+  final start = code.indexOf(declaration);
+  // The parameter list, then a return type or not, then { or =.
+  var depth = 0;
+  var i = code.indexOf('(', start);
+  for (; i < code.length; i++) {
+    if (code[i] == '(') depth++;
+    if (code[i] == ')' && --depth == 0) break;
+  }
+  final open = code.indexOf('{', i);
+  final equals = code.indexOf('=', i);
+  if (equals >= 0 && equals < open) return '';
+  String? quote;
+  depth = 0;
+  for (var j = open; j < code.length; j++) {
+    final c = code[j];
+    if (quote != null) {
+      if (c == r'\') {
+        j++;
+      } else if (c == quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (c == '"' || c == "'") {
+      quote = c;
+    } else if (c == '{') {
+      depth++;
+    } else if (c == '}' && --depth == 0) {
+      return code.substring(open, j + 1);
+    }
+  }
+  fail('$declaration has no closing brace');
+}
+
+/// The JVM tests (android/app/src/test) exercise each of [rules].
+void _expectJvmTests(List<String> rules) {
+  final test = File('${_appRoot().path}/android/app/src/test/kotlin/dev/'
+      'calorietracker/calorie_tracker/IntakeRulesTest.kt');
+  expect(test.existsSync(), isTrue, reason: test.path);
+  final source = test.readAsStringSync();
+  for (final rule in rules) {
+    expect(source, contains(rule), reason: 'IntakeRulesTest never runs $rule');
+  }
+}
+
+/// Where pub resolved [package] (.dart_tool/package_config.json), so a
+/// gate can read the plugin version the app actually builds with.
+String _pluginRoot(String package) {
+  final config = jsonDecode(
+      File('${_appRoot().path}/.dart_tool/package_config.json')
+          .readAsStringSync()) as Map<String, Object?>;
+  final entry = (config['packages'] as List)
+      .cast<Map<String, Object?>>()
+      .firstWhere((p) => p['name'] == package);
+  final root = Uri.parse(entry['rootUri'] as String);
+  return root.isAbsolute
+      ? root.toFilePath()
+      : Directory('${_appRoot().path}/.dart_tool')
+          .uri
+          .resolveUri(root)
+          .toFilePath();
+}
+
+String _manifest() =>
+    File('${_appRoot().path}/android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
+
+/// [xml] without its comments, so a comment that names a permission or a
+/// component never satisfies (or trips) a gate.
+String _uncommented(String xml) =>
+    xml.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
+
+/// Every `<uses-permission>` in [manifest], by name: true when the entry is
+/// a `tools:node="remove"` (it strips a library's permission from the
+/// merged manifest rather than declaring one).
+Map<String, bool> _permissions(String manifest) => {
+      for (final m in RegExp(r'<uses-permission\b([^>]*)>')
+          .allMatches(_uncommented(manifest)))
+        RegExp(r'android:name="([^"]+)"').firstMatch(m.group(1)!)!.group(1)!:
+            m.group(1)!.contains('tools:node="remove"'),
+    };
+
+/// The permissions [manifest] declares (removals left out).
+Set<String> _declared(String manifest) => {
+      for (final e in _permissions(manifest).entries)
+        if (!e.value) e.key,
+    };
+
 /// Release-manifest drift gate.
 ///
 /// Flutter auto-injects INTERNET into the DEBUG and PROFILE manifests (for
@@ -63,18 +207,30 @@ String _pbxObject(
 /// actually needs.
 void main() {
   test('main AndroidManifest declares the permissions release needs', () {
-    final manifest =
-        File('${_appRoot().path}/android/app/src/main/AndroidManifest.xml')
-            .readAsStringSync();
+    final declared = _declared(_manifest());
     for (final permission in [
       'android.permission.INTERNET',
       'android.permission.READ_MEDIA_IMAGES',
       'android.permission.POST_NOTIFICATIONS',
     ]) {
-      expect(manifest.contains(permission), isTrue,
+      expect(declared.contains(permission), isTrue,
           reason: '$permission missing from the MAIN manifest — debug/profile '
               'builds get it auto-injected, release does not.');
     }
+  });
+
+  // Every permission is a Play review question (and a Data safety answer),
+  // so none arrives unnoticed. The system photo picker, Save to device
+  // and the notification-settings link need none.
+  test('the main manifest declares exactly these permissions', () {
+    expect(_declared(_manifest()), {
+      'android.permission.INTERNET',
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.POST_NOTIFICATIONS',
+      'android.permission.RECEIVE_BOOT_COMPLETED',
+    });
   });
 
   // The notification small icon is only ever named from Dart, which the
@@ -605,7 +761,7 @@ void main() {
   // from <application>. Exclude-only: an <include> would silently stop
   // backing up everything else the app keeps.
   test('Android excludes the local store from cloud backup and device '
-      'transfer, and nothing else', () {
+      'transfer, and includes nothing', () {
     final main = '${_appRoot().path}/android/app/src/main';
     final manifest = File('$main/AndroidManifest.xml').readAsStringSync();
     final application =
@@ -645,6 +801,71 @@ void main() {
     expect(exclude.hasMatch(full), isTrue,
         reason: 'fullBackupContent does not exclude $localStoreDirName/');
     expect(full, isNot(contains('<include')));
+  });
+
+  // flutter_secure_storage's files hold the API keys encrypted with a key
+  // in this phone's Android Keystore, which never leaves the phone: a copy
+  // restored from a cloud backup or carried to a new phone can never be
+  // read there (and the plugin's README asks apps to exclude them). Every
+  // one of its shared_prefs files stays out of both backup schemes and the
+  // Android 11-and-lower rules, so a restored phone starts with no keys
+  // and asks for them (AndroidSecureKeyStore covers a copy that already
+  // got through). Paths take no wildcards, hence each file by name. No
+  // disableIfNoEncryptionCapabilities: an owner decision of its own.
+  test("Android keeps flutter_secure_storage's files out of backup and "
+      'device transfer', () {
+    final main = '${_appRoot().path}/android/app/src/main';
+    const files = [
+      'FlutterSecureStorage.xml',
+      'FlutterSecureKeyStorage.xml',
+      'FlutterSecureStorageConfiguration.xml',
+      'FlutterSecureStorageConfiguration:FlutterSecureStorage.xml',
+    ];
+    String section(String xml, String tag) {
+      final body = RegExp('<$tag(?:\\s[^>]*)?>(.*?)</$tag>', dotAll: true)
+          .firstMatch(_uncommented(xml))
+          ?.group(1);
+      expect(body, isNotNull, reason: '<$tag> missing');
+      return body!;
+    }
+
+    final extraction =
+        File('$main/res/xml/data_extraction_rules.xml').readAsStringSync();
+    final legacy = File('$main/res/xml/backup_rules.xml').readAsStringSync();
+    final sections = {
+      'cloud-backup': section(extraction, 'cloud-backup'),
+      'device-transfer': section(extraction, 'device-transfer'),
+      'full-backup-content': section(legacy, 'full-backup-content'),
+    };
+    sections.forEach((name, body) {
+      for (final file in files) {
+        expect(
+            RegExp('<exclude\\s+domain="sharedpref"\\s+'
+                    'path="${RegExp.escape(file)}"\\s*/>')
+                .hasMatch(body),
+            isTrue,
+            reason: '$name does not exclude $file');
+      }
+      expect(body, isNot(contains('<include')), reason: name);
+    });
+    expect(extraction, isNot(contains('disableIfNoEncryptionCapabilities')));
+
+    // The names, in the plugin version pub resolved: the data and the
+    // wrapped-key files (FlutterSecureStorageConfig.java), the saved
+    // cipher settings (NamespacedConfigSource.java).
+    final java = '${_pluginRoot('flutter_secure_storage')}/android/src/main/'
+        'java/com/it_nomads/fluttersecurestorage';
+    final config =
+        File('$java/FlutterSecureStorageConfig.java').readAsStringSync();
+    expect(config,
+        contains('DEFAULT_PREF_NAME = "FlutterSecureStorage";'));
+    expect(config, contains(': "FlutterSecureKeyStorage";'));
+    final source =
+        File('$java/NamespacedConfigSource.java').readAsStringSync();
+    expect(source,
+        contains('LEGACY_GLOBAL_CONFIG_NAME = "FlutterSecureStorageConfiguration";'));
+    expect(source,
+        contains('return "FlutterSecureStorageConfiguration:" + sharedPreferencesName;'));
   });
 
   // Design R7a: while restaurant lookup uses the photo location, the app
@@ -730,5 +951,516 @@ void main() {
         .readAsStringSync();
     expect(releasing, contains('NSPrivacyCollectedDataTypes'));
     expect(releasing, contains('the lookup adds no data type'));
+  });
+
+  // MainActivity's decisions live in IntakeRules.kt, where the JVM unit
+  // tests (android/app/src/test, run by mobile-build.yml) exercise them for
+  // real; the pins below hold MainActivity's wiring of them, on its code
+  // with the comments stripped and whitespace collapsed (so neither a
+  // commented-out line nor a reflow satisfies them).
+
+  // A share is delivered once. After Android stops the process, reopening
+  // the app from Recents or the icon recreates MainActivity with the
+  // intent that first started its task (and the sender's grant), and
+  // receive_sharing_intent reads activity.intent as a new share while
+  // super.onCreate attaches it: a deleted meal came back, a not-food photo
+  // went to the AI again. A recreated activity (saved state) or a launch
+  // from Recents therefore hands the plugins an empty intent — no copy —
+  // which also keeps a bitewise://setup link from reopening its dialog.
+  // New shares still arrive through onNewIntent, unchanged.
+  test('a recreated MainActivity never re-delivers its launch share', () {
+    final code = _kotlinCode(_mainActivity());
+    final create = _kotlinFunction(code, 'override fun onCreate(');
+    expect(
+        create,
+        contains('val replay = IntakeRules.isRedelivery(savedInstanceState '
+            '!= null, intent?.flags ?: 0) if (replay) { intent?.let { '
+            'setIntent(emptyShare(it)) } } else { intent?.let { '
+            'setIntent(withSafeShares(it)) } } super.onCreate('
+            'savedInstanceState)'),
+        reason: 'replay → the empty intent, else the safe copies, both '
+            'before the plugins read it in super.onCreate');
+    expect(_kotlinFunction(code, 'override fun onNewIntent('),
+        '{ super.onNewIntent(withSafeShares(intent)) }');
+    final rules = _kotlinCode(_intakeRules());
+    expect(
+        rules,
+        contains('fun isRedelivery(hasSavedState: Boolean, flags: Int): '
+            'Boolean = hasSavedState || (flags and '
+            'Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0'));
+    _expectJvmTests(['isRedelivery']);
+  });
+
+  // Chopstats is a target in its own sharesheet: Today's day image and the
+  // Export file go out through share_plus's FileProvider. Picked there,
+  // the report image would come back in as a meal photo and go to the AI.
+  // Share intake leaves out every stream from that provider; with nothing
+  // left, the share reaches no plugin.
+  test("share intake leaves out the app's own share-out files", () {
+    final code = _kotlinCode(_mainActivity());
+    final safe = _kotlinFunction(code, 'private fun withSafeShares(');
+    expect(
+        safe,
+        contains('if (uri == null) return@forEachIndexed if '
+            '(IntakeRules.isOwnShareOut(uri.scheme, uri.authority, '
+            'packageName)) return@forEachIndexed val name = shareName(uri) '
+            '?: return@forEachIndexed'),
+        reason: 'skipped before anything is read or copied');
+    expect(safe, contains('if (copies.isEmpty()) return emptyShare(intent)'));
+    final rules = _kotlinCode(_intakeRules());
+    expect(rules,
+        contains('const val SHARE_OUT_AUTHORITY_SUFFIX = ".flutter.share_provider"'));
+    _expectJvmTests(['isOwnShareOut']);
+    // share_plus's provider: the applicationId, which is the package.
+    final sharePlus = _pluginRoot('share_plus');
+    final pluginManifest =
+        File('$sharePlus/android/src/main/AndroidManifest.xml')
+            .readAsStringSync();
+    expect(pluginManifest,
+        contains(r'android:authorities="${applicationId}.flutter.share_provider"'));
+  });
+
+  // A file:// URI into the app's own data is never copied, shared or
+  // picked (review 171, C5; review 2026-11-13 for picks).
+  test("neither a share nor a pick copies the app's own files", () {
+    final code = _kotlinCode(_mainActivity());
+    expect(
+        code,
+        contains('private fun isOwnFile(uri: Uri): Boolean = "file".equals('
+            'uri.scheme, ignoreCase = true) && IntakeRules.liesIn('
+            'File(applicationInfo.dataDir), uri.path)'));
+    expect(_kotlinFunction(code, 'private fun copyShare('),
+        startsWith('{ if (isOwnFile(uri)) return null '));
+    final picked = _kotlinFunction(code, 'private fun onPhotosPicked(');
+    final own = picked.indexOf('if (isOwnFile(uri)) { failed++ return@forEach }');
+    expect(own, greaterThan(0));
+    expect(picked.indexOf('copyAtMost(uri, out, MAX_SHARE_BYTES)'),
+        greaterThan(own));
+    _expectJvmTests(['liesIn']);
+  });
+
+  // Log and Leftovers pick photos through the system Photo Picker, which
+  // needs no permission (Play's Photo and Video FAQ asks apps to serve
+  // users who grant no broad access). FlutterActivity is a plain Activity
+  // with no registerForActivityResult, so MainActivity runs AndroidX's
+  // contracts by hand: createIntent, startActivityForResult, parseResult.
+  // Copies go to cacheDir/picked_photos/<uuid>/<name>, under the share cap.
+  // One call at a time, answered exactly once (SingleCall): a reply sent
+  // twice crashes, and a call never answered leaves every later pick busy.
+  // The ModuleDependencies entry asks Play services for the backported
+  // picker on Android 7-10 (minSdk 24); elsewhere the contract falls back
+  // to ACTION_OPEN_DOCUMENT by itself.
+  test('MainActivity serves pickImages through the system photo picker', () {
+    final code = _kotlinCode(_mainActivity());
+    expect(
+        code,
+        contains('"pickImages" -> pickImages( (call.argument<Any?>("max") as? '
+            'Number)?.toInt() ?: 1, result, )'));
+    expect(code, contains('const val PICKED_PHOTO_FOLDER = "picked_photos"'));
+    expect(code, contains('const val PHOTO_PICK_REQUEST = 4208'));
+    expect(code, contains('PHOTO_PICK_REQUEST -> onPhotosPicked(resultCode, data)'));
+
+    final pick = _kotlinFunction(code, 'private fun pickImages(');
+    expect(
+        pick,
+        startsWith('{ if (photoPicks.isOpen) { result.success('
+            'photoPickAnswer("busy")) return } val max = '
+            'IntakeRules.pickMax(requested, systemPickLimit()) '));
+    expect(
+        pick,
+        contains('if (max == 1) ActivityResultContracts.PickVisualMedia()'
+            '.createIntent(this, request) else ActivityResultContracts'
+            '.PickMultipleVisualMedia(max).createIntent(this, request)'));
+    expect(
+        pick,
+        contains('PickVisualMediaRequest(ActivityResultContracts'
+            '.PickVisualMedia.ImageOnly)'));
+    expect(
+        pick,
+        contains('} catch (e: Exception) { result.success('
+            'photoPickAnswer("unavailable")) return } val call = '
+            'photoPicks.open { result.success(it) } ?: return '
+            'result.success(photoPickAnswer("busy")) photoPickCall = call '
+            'photoPickMax = max try { startActivityForResult(intent, '
+            'PHOTO_PICK_REQUEST) } catch (e: Exception) { '
+            'photoPicks.answer(call, photoPickAnswer("unavailable")) } }'));
+    expect(
+        _kotlinFunction(code, 'private fun systemPickLimit('),
+        isEmpty,
+        reason: 'an expression body, pinned below');
+    expect(
+        code,
+        contains('private fun systemPickLimit(): Int? = if '
+            '(Build.VERSION.SDK_INT >= 33 || (Build.VERSION.SDK_INT >= 30 && '
+            'SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R) >= 2) ) '
+            'MediaStore.getPickImagesMaxLimit() else null'));
+
+    final picked = _kotlinFunction(code, 'private fun onPhotosPicked(');
+    expect(
+        picked,
+        startsWith('{ if (!photoPicks.isOpen) return val call = '
+            'photoPickCall val max = photoPickMax '));
+    expect(picked,
+        contains('ActivityResultContracts.PickVisualMedia().parseResult('
+            'resultCode, data)'));
+    expect(picked,
+        contains('ActivityResultContracts.PickMultipleVisualMedia(max)'
+            '.parseResult(resultCode, data)'));
+    expect(
+        picked,
+        contains('val uris = IntakeRules.firstPicks(picked, max) if '
+            '(resultCode != Activity.RESULT_OK || uris.isEmpty()) { '
+            'photoPicks.answer(call, photoPickAnswer("cancelled")) return }'));
+    expect(
+        picked,
+        contains('val root = File(cacheDir, PICKED_PHOTO_FOLDER) '
+            'IntakeRules.tidyPickFolders(root, System.currentTimeMillis())'));
+    expect(picked, isNot(contains('deleteRecursively')),
+        reason: 'only tidyPickFolders clears earlier picks');
+    expect(picked, contains('copyAtMost(uri, out, MAX_SHARE_BYTES)'));
+    expect(picked, contains('val dir = File(root, UUID.randomUUID().toString())'));
+    expect(picked, contains('dateTaken(uri)?.let { item["dateTakenMs"] = it }'));
+    expect(
+        picked,
+        contains('runOnUiThread { photoPicks.answer(call, photoPickAnswer('
+            '"ok", items, tooBig, failed)) } }.start() }'));
+    expect('.success('.allMatches(picked), isEmpty,
+        reason: 'answers only through SingleCall, which answers once');
+    expect('photoPicks.answer('.allMatches(picked), hasLength(2));
+    expect(code, contains('MediaStore.MediaColumns.DATE_TAKEN'));
+    _expectJvmTests(['pickMax', 'firstPicks', 'tidyPickFolders', 'SingleCall']);
+
+    final gradle = File('${_appRoot().path}/android/app/build.gradle.kts')
+        .readAsStringSync();
+    final activity = RegExp(r'implementation\("androidx\.activity:activity-ktx:'
+            r'(\d+)\.(\d+)\.(\d+)"\)')
+        .firstMatch(gradle);
+    expect(activity, isNotNull, reason: 'androidx.activity is not declared');
+    final major = int.parse(activity!.group(1)!);
+    final minor = int.parse(activity.group(2)!);
+    expect(major > 1 || (major == 1 && minor >= 7), isTrue,
+        reason: 'the picker contracts need androidx.activity 1.7.0 or later');
+
+    final manifest = _manifest();
+    expect(RegExp(r'<manifest\b[^>]*>').firstMatch(manifest)?.group(0),
+        contains('xmlns:tools="http://schemas.android.com/tools"'));
+    final service = RegExp(
+            r'<service\s+android:name="com\.google\.android\.gms\.metadata\.'
+            r'ModuleDependencies"(.*?)</service>',
+            dotAll: true)
+        .firstMatch(_uncommented(manifest))
+        ?.group(1);
+    expect(service, isNotNull, reason: 'the picker backport entry is missing');
+    expect(service, contains('android:enabled="false"'));
+    expect(service, contains('android:exported="false"'));
+    expect(service, contains('tools:ignore="MissingClass"'));
+    expect(service, contains('<action android:name='
+        '"com.google.android.gms.metadata.MODULE_DEPENDENCIES"'));
+    expect(service, contains('<meta-data android:name='
+        '"photopicker_activity:0:required" android:value=""'));
+  });
+
+  // Export › Save to device: a stock Pixel's sharesheet has no "save to
+  // Files", so the export is written where the user picks with the
+  // Storage Access Framework (no permission). The method only ever copies
+  // a regular file whose real path lies in the app's cache, where the
+  // export is written: never the database or anything else the app keeps.
+  // The new document is opened only in a truncating mode, and a failed
+  // copy removes it. If Android recreates the activity while the screen is
+  // up, the source survives in the saved state, so the user's pick still
+  // gets the file (or, with no source, the empty document is removed).
+  test('MainActivity serves saveFile, from the cache only', () {
+    final code = _kotlinCode(_mainActivity());
+    expect(
+        code,
+        contains('"saveFile" -> saveFile( call.argument<Any?>("path") as? '
+            'String, call.argument<Any?>("name") as? String, '
+            'call.argument<Any?>("mime") as? String, result, )'));
+    expect(code, contains('const val SAVE_REQUEST = 4209'));
+    expect(code, contains('SAVE_REQUEST -> onSaveTargetPicked(resultCode, data)'));
+    expect(
+        code,
+        contains('private fun cachedFile(path: String?): File? = '
+            'IntakeRules.regularFileIn(cacheDir, path)'));
+    final save = _kotlinFunction(code, 'private fun saveFile(');
+    expect(
+        save,
+        startsWith('{ if (saves.isOpen) { result.success(saveAnswer("busy")) '
+            'return } val source = cachedFile(path) if (source == null) { '
+            'result.success(saveAnswer("failed")) return } val intent = '
+            'Intent(Intent.ACTION_CREATE_DOCUMENT).apply { addCategory('
+            'Intent.CATEGORY_OPENABLE) '));
+    expect(save, contains('putExtra(Intent.EXTRA_TITLE, baseName(name) ?: source.name)'));
+    expect(
+        save,
+        contains('val call = saves.open { result.success(it) } ?: return '
+            'result.success(saveAnswer("busy")) saveCall = call '
+            'pendingSaveSource = source try { startActivityForResult(intent, '
+            'SAVE_REQUEST) } catch (e: Exception) { pendingSaveSource = null '
+            'saves.answer(call, saveAnswer("unavailable")) } }'));
+
+    final saved = _kotlinFunction(code, 'private fun onSaveTargetPicked(');
+    expect(
+        saved,
+        startsWith('{ val call = if (saves.isOpen) saveCall else null val uri '
+            '= data?.data val source = pendingSaveSource pendingSaveSource = '
+            'null val step = IntakeRules.saveStep(resultCode == '
+            'Activity.RESULT_OK, uri != null, source != null) if (step == '
+            'IntakeRules.SaveStep.CANCEL || uri == null) { call?.let { '
+            'saves.answer(it, saveAnswer("cancelled")) } return } if (step == '
+            'IntakeRules.SaveStep.DISCARD || source == null) { '
+            'discardDocument(uri) call?.let { saves.answer(it, '
+            'saveAnswer("failed")) } return } Thread { val ok = try { val '
+            'file = cachedFile(source.path) ?: throw IllegalStateException() '
+            'val out = IntakeRules.firstStream(IntakeRules.SAVE_MODES) { '
+            'contentResolver.openOutputStream(uri, it) } out?.use { o -> '
+            'file.inputStream().use { it.copyTo(o, 64 * 1024) } } != null } '
+            'catch (e: Exception) { false } if (!ok) discardDocument(uri) '
+            'runOnUiThread { call?.let { saves.answer(it, if (ok) '
+            'saveAnswer("ok") else saveAnswer("failed")) } } }.start() }'));
+    expect('.success('.allMatches(saved), isEmpty,
+        reason: 'answers only through SingleCall, which answers once');
+    expect(code, isNot(contains('openOutputStream(uri, "w")')),
+        reason: 'plain "w" may leave stale bytes; SAVE_MODES only');
+    expect(_kotlinFunction(code, 'private fun discardDocument('),
+        contains('DocumentsContract.deleteDocument(contentResolver, uri)'));
+    // The pending source outlives a recreated activity.
+    expect(_kotlinFunction(code, 'override fun onSaveInstanceState('),
+        '{ super.onSaveInstanceState(outState) pendingSaveSource?.let { '
+        'outState.putString(STATE_SAVE_SOURCE, it.path) } }');
+    final create = _kotlinFunction(code, 'override fun onCreate(');
+    expect(
+        create,
+        endsWith('super.onCreate(savedInstanceState) pendingSaveSource = '
+            'cachedFile(savedInstanceState?.getString(STATE_SAVE_SOURCE)) }'),
+        reason: 'restored through the same cache check');
+    _expectJvmTests(
+        ['regularFileIn', 'saveStep', 'SAVE_MODES', 'firstStream', 'SingleCall']);
+  });
+
+  // Settings' notifications-off remedy lands on the app's own
+  // notification page (API 26+), not App info two taps away; App info
+  // stays the fallback. True only when a page actually opened. The
+  // background lane calls it and falls back to openAppSettings when it is
+  // not implemented.
+  test('MainActivity serves openNotificationSettings', () {
+    final code = _kotlinCode(_mainActivity());
+    final channel = RegExp(
+            r'MethodChannel\(flutterEngine\.dartExecutor\.binaryMessenger, '
+            r'CHANNEL\)(.*?)\}\s*\}',
+            dotAll: true)
+        .firstMatch(code)
+        ?.group(1);
+    expect(channel, contains('"openNotificationSettings" -> '
+        'result.success(openNotificationSettings())'));
+    expect(code, contains('const val CHANNEL = "dev.calorietracker/background"'));
+    expect(
+        _kotlinFunction(code, 'private fun openNotificationSettings('),
+        '{ val pages = mutableListOf<Intent>() if (Build.VERSION.SDK_INT >= '
+        'Build.VERSION_CODES.O) { pages.add( Intent('
+        'Settings.ACTION_APP_NOTIFICATION_SETTINGS) .putExtra('
+        'Settings.EXTRA_APP_PACKAGE, packageName), ) } pages.add( Intent('
+        'Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts('
+        '"package", packageName, null)), ) return IntakeRules.openFirst(pages) '
+        '{ startActivity(it) } }');
+    _expectJvmTests(['openFirst']);
+  });
+
+  // The JVM unit tests run on CI (mobile-build.yml), and the built APK's
+  // permissions are checked there against an allowlist: the merged
+  // manifest, which this file cannot see, is what Play reviews. Every
+  // permission the main manifest declares must be on that list, so a new
+  // one needs a deliberate edit in both places.
+  test('CI runs the JVM unit tests and checks the APK permissions', () {
+    final root = _appRoot().parent.path;
+    final workflow =
+        File('$root/.github/workflows/mobile-build.yml').readAsStringSync();
+    expect(workflow, contains('./gradlew :app:testDebugUnitTest'));
+    expect(workflow, contains('flutter build apk --release'));
+    expect(workflow, contains('dump permissions'));
+    final allowed = RegExp(r'^\s+(android\.permission\.[A-Z_]+|'
+            r'dev\.calorietracker\.calorie_tracker\.[A-Z_]+)\s*$',
+            multiLine: true)
+        .allMatches(workflow)
+        .map((m) => m.group(1)!)
+        .toSet();
+    expect(allowed, containsAll(_declared(_manifest())));
+    for (final banned in [
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.SCHEDULE_EXACT_ALARM',
+      'android.permission.USE_EXACT_ALARM',
+    ]) {
+      expect(allowed, isNot(contains(banned)));
+    }
+    final gradle = File('${_appRoot().path}/android/app/build.gradle.kts')
+        .readAsStringSync();
+    expect(gradle, contains('testImplementation("junit:junit:'));
+  });
+
+  // The daily summary is armed with the OS on Android too (background
+  // lane): flutter_local_notifications' zonedSchedule posts it from
+  // ScheduledNotificationReceiver, and alarms die at shutdown, so the boot
+  // receiver re-arms them after a reboot or an app update. Inexact only
+  // (AndroidScheduleMode.inexactAllowWhileIdle): no exact-alarm permission,
+  // which Play reviews.
+  test("flutter_local_notifications' scheduled-notification receivers are "
+      'declared, and no exact-alarm permission', () {
+    final manifest = _uncommented(_manifest());
+    final application = RegExp(r'<application\b.*?</application>',
+            dotAll: true)
+        .firstMatch(manifest)
+        ?.group(0);
+    expect(application, isNotNull);
+    const package = 'com.dexterous.flutterlocalnotifications';
+    expect(
+        RegExp('<receiver\\s+android:exported="false"\\s+'
+                'android:name="$package\\.ScheduledNotificationReceiver"\\s*/>')
+            .hasMatch(application!),
+        isTrue,
+        reason: 'ScheduledNotificationReceiver missing');
+    final boot = RegExp(
+            '<receiver\\s+android:exported="false"\\s+'
+            'android:name="$package\\.ScheduledNotificationBootReceiver"\\s*>'
+            '(.*?)</receiver>',
+            dotAll: true)
+        .firstMatch(application)
+        ?.group(1);
+    expect(boot, isNotNull, reason: 'ScheduledNotificationBootReceiver missing');
+    expect(
+        RegExp(r'<action android:name="([^"]+)"\s*/>')
+            .allMatches(boot!)
+            .map((m) => m.group(1))
+            .toSet(),
+        {
+          'android.intent.action.BOOT_COMPLETED',
+          'android.intent.action.MY_PACKAGE_REPLACED',
+          'android.intent.action.QUICKBOOT_POWERON',
+          'com.htc.intent.action.QUICKBOOT_POWERON',
+        });
+    expect(_declared(manifest), contains('android.permission.RECEIVE_BOOT_COMPLETED'));
+    for (final exact in ['SCHEDULE_EXACT_ALARM', 'USE_EXACT_ALARM']) {
+      expect(manifest, isNot(contains(exact)), reason: exact);
+    }
+    // The classes exist in the plugin version pub resolved.
+    final sources = '${_pluginRoot('flutter_local_notifications')}/android/'
+        'src/main/java/com/dexterous/flutterlocalnotifications';
+    for (final receiver in [
+      'ScheduledNotificationReceiver',
+      'ScheduledNotificationBootReceiver',
+    ]) {
+      expect(File('$sources/$receiver.java').existsSync(), isTrue,
+          reason: receiver);
+    }
+  });
+
+  // WorkManager's library manifest brings FOREGROUND_SERVICE and its
+  // SystemForegroundService (no type), which it only uses for expedited
+  // work on Android 11 and lower or for setForeground. The app registers
+  // one periodic task and nothing else, so both are stripped from the
+  // merged manifest. Expedited or one-off work would need them back.
+  // hasFragileUserData: on Android 10+ the uninstall dialog offers to keep
+  // the app's data, and the meal log lives only on the phone. Should the
+  // kept key store lose its Keystore key, AndroidSecureKeyStore turns it
+  // into "no key" (android_key_store_test).
+  test('the manifest strips WorkManager\'s foreground service and keeps '
+      'data on uninstall when asked', () {
+    final manifest = _manifest();
+    final permissions = _permissions(manifest);
+    expect(permissions['android.permission.FOREGROUND_SERVICE'], isTrue,
+        reason: 'FOREGROUND_SERVICE must be a tools:node="remove" entry');
+    expect(_declared(manifest),
+        isNot(contains('android.permission.FOREGROUND_SERVICE')));
+    expect(
+        RegExp(r'<service\s+android:name="androidx\.work\.impl\.foreground\.'
+                r'SystemForegroundService"\s+tools:node="remove"\s*/>')
+            .hasMatch(_uncommented(manifest)),
+        isTrue,
+        reason: 'SystemForegroundService is not removed');
+    final application = RegExp(r'<application\b[^>]*>')
+        .firstMatch(_uncommented(manifest))
+        ?.group(0);
+    expect(application, contains('android:hasFragileUserData="true"'));
+
+    // Nothing in Dart asks WorkManager for expedited or one-off work,
+    // which on Android 11 and lower runs as that foreground service.
+    final dart = Directory('${_appRoot().path}/lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'));
+    for (final file in dart) {
+      final source = file.readAsStringSync();
+      for (final call in [
+        'registerOneOffTask',
+        'outOfQuotaPolicy',
+        'OutOfQuotaPolicy',
+      ]) {
+        expect(source, isNot(contains(call)),
+            reason: '${file.path} uses $call: put WorkManager\'s '
+                'foreground service back first');
+      }
+    }
+  });
+
+  // Android 7-11 (API 24-30) draw the launch window from LaunchTheme's
+  // colorBackground (launch_background in drawable-v21), which Theme.Light
+  // made white: a white flash before the grey first frame. Both launch
+  // themes take the app's page colours (lib/ui/theme/tokens.dart), as the
+  // Android 12+ splash themes do.
+  test('the API 24-30 launch window takes the app page colours', () {
+    final res = '${_appRoot().path}/android/app/src/main/res';
+    String launch(String folder) {
+      final xml = File('$res/$folder/styles.xml').readAsStringSync();
+      final style = RegExp(r'<style name="LaunchTheme"[^>]*>(.*?)</style>',
+              dotAll: true)
+          .firstMatch(_uncommented(xml))
+          ?.group(1);
+      expect(style, isNotNull, reason: folder);
+      expect(style,
+          contains('<item name="android:windowBackground">@drawable/'
+              'launch_background</item>'),
+          reason: folder);
+      return style!;
+    }
+
+    expect(launch('values'),
+        contains('<item name="android:colorBackground">#FFF2F2F7</item>'));
+    expect(launch('values-night'),
+        contains('<item name="android:colorBackground">#FF000000</item>'));
+    expect(File('$res/drawable-v21/launch_background.xml').readAsStringSync(),
+        contains('android:drawable="?android:colorBackground"'));
+    final tokens = File('${_appRoot().path}/lib/ui/theme/tokens.dart')
+        .readAsStringSync();
+    expect(tokens, contains('page: Color(0xFFF2F2F7)'));
+    expect(tokens, contains('page: Color(0xFF000000)'));
+  });
+
+  // Owner decision 2026-11-13: the package stays, and the upload key the
+  // GitHub APKs are signed with becomes Play's app-signing key. Both are
+  // permanent once the first bundle is uploaded: a new package is a new
+  // app on Play, and a phone can only update between builds of one
+  // package and one signer (the log lives only on the phone, so an
+  // uninstall loses it).
+  test('the Android package is permanent', () {
+    final gradle =
+        File('${_appRoot().path}/android/app/build.gradle.kts')
+            .readAsStringSync();
+    const package = 'dev.calorietracker.calorie_tracker';
+    expect(gradle, contains('applicationId = "$package"'));
+    expect(gradle, contains('namespace = "$package"'));
+    expect(gradle, isNot(contains('applicationIdSuffix')));
+    for (final invite in [
+      'TODO: Specify your own unique Application ID',
+      'You can update the following values to match your application needs',
+    ]) {
+      expect(gradle, isNot(contains(invite)),
+          reason: 'the template line invites a change that would orphan '
+              'every installed copy');
+    }
+    final note = RegExp(r'\n(\s*//[^\n]*\n)+\s*applicationId = ')
+        .firstMatch(gradle)
+        ?.group(0);
+    expect(note, contains('never change applicationId'),
+        reason: 'the note above applicationId says it is permanent');
+    expect(_mainActivity(), startsWith('package $package\n'));
   });
 }

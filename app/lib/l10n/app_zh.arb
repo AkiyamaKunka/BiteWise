@@ -743,7 +743,7 @@
   "importClipboardEmpty": "剪贴板里没有文本。",
   "nlSomethingWrong": "❌ 处理这条消息时出了点问题，请重试。",
   "nlMissingServer": "❌ 还没有配置服务器——请先在「设置」里填写服务器地址和上传密钥。",
-  "nlMissingKey": "❌ 还没有 {provider} 的 API 密钥——请先在「设置」里添加，才能用文字记录。",
+  "nlMissingKey": "❌ 还没有 {provider} 的 API Key——请先在「设置」里添加，才能用文字记录。",
   "nlTypeFirst": "先输入你吃了什么。",
   "nlErrorContactingAi": "❌ 联系 AI 失败，请重试。",
   "nlNoFoodDetected": "🚫 这段描述里没有识别出食物。",
@@ -1030,5 +1030,9 @@
   "diagBackupSizeTitle": "Android 备份",
   "diagBackupSizeLine": "Android 自带的备份大约要保存 {size}，它对每个应用最多保存 25 MB。",
   "autoScanNeedsHttps": "自动记录没有运行：你的服务器地址不是以 https:// 开头的，筷拍不会向它发送任何内容。请到「AI 服务」›「你自己的服务器」修改地址。",
-  "diagBgStopNeedsHttps": "没有运行：服务器地址不是以 https:// 开头的。"
+  "diagBgStopNeedsHttps": "没有运行：服务器地址不是以 https:// 开头的。",
+  "addChooseAllPhotos": "从所有照片中选择…",
+  "addPickerNote": "Android 的照片选择器会显示你的所有照片，筷拍只会收到你选中的那一张。",
+  "addPickerUnavailable": "这台手机上无法打开照片选择器。你仍然可以在相册应用里把照片分享给筷拍。",
+  "addOldPhotoLoggedToday": "这张照片拍摄于 {taken}，已超过 {days} 天，所以这餐记在了今天。如需记到拍摄当天，请打开这餐修改日期。"
 }

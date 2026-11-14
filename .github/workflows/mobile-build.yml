@@ -132,6 +132,68 @@ jobs:
         working-directory: app
         run: flutter build appbundle --release
 
+      # MainActivity's decisions (IntakeRules.kt) on the JVM: the share
+      # replay rule, the share-out filter, the cache-only save check, the
+      # one-answer call state, the pick limits and the settings link
+      # (app/android/app/src/test). After the build, which writes
+      # android/local.properties.
+      - name: Android unit tests (MainActivity's rules)
+        working-directory: app/android
+        run: ./gradlew :app:testDebugUnitTest
+
+      # The same release build as an APK (it reuses the bundle's compiled
+      # and shrunk code), so aapt2 can read the merged manifest: the
+      # libraries' permissions included, which is what Play reviews.
+      - name: Build APK (release, debug-signed)
+        working-directory: app
+        run: flutter build apk --release
+
+      # Exactly these, no more and no fewer. A new permission is a Play
+      # review question and a Data safety answer: add it here on purpose
+      # (manifest_gate_test checks every permission the main manifest
+      # declares is on this list). Never FOREGROUND_SERVICE (stripped from
+      # WorkManager) or an exact-alarm permission.
+      - name: The APK asks for exactly the allowed permissions
+        working-directory: app
+        run: |
+          set -euo pipefail
+          sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          aapt2="$(ls -d "$sdk"/build-tools/* | sort -V | tail -1)/aapt2"
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          "$aapt2" dump permissions "$apk"
+          got=$("$aapt2" dump permissions "$apk" \
+            | sed -n "s/^uses-permission: name='\([^']*\)'.*/\1/p" | LC_ALL=C sort -u)
+          allowed=$(sed 's/^[[:space:]]*//' <<'LIST' | LC_ALL=C sort -u
+            android.permission.INTERNET
+            android.permission.READ_MEDIA_IMAGES
+            android.permission.READ_MEDIA_VISUAL_USER_SELECTED
+            android.permission.READ_EXTERNAL_STORAGE
+            android.permission.POST_NOTIFICATIONS
+            android.permission.RECEIVE_BOOT_COMPLETED
+            android.permission.VIBRATE
+            android.permission.WAKE_LOCK
+            android.permission.ACCESS_NETWORK_STATE
+            dev.calorietracker.calorie_tracker.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+          LIST
+          )
+          for banned in FOREGROUND_SERVICE SCHEDULE_EXACT_ALARM USE_EXACT_ALARM; do
+            if grep -qx "android.permission.$banned" <<<"$got"; then
+              echo "::error::app-release.apk asks for android.permission.$banned"
+              exit 1
+            fi
+          done
+          unexpected=$(LC_ALL=C comm -23 <(echo "$got") <(echo "$allowed"))
+          missing=$(LC_ALL=C comm -13 <(echo "$got") <(echo "$allowed"))
+          if [ -n "$unexpected" ]; then
+            echo "::error::app-release.apk asks for permissions not on the allowlist: $(echo $unexpected)"
+            exit 1
+          fi
+          if [ -n "$missing" ]; then
+            echo "::error::app-release.apk no longer asks for: $(echo $missing). Update the allowlist in .github/workflows/mobile-build.yml with the manifest."
+            exit 1
+          fi
+          echo "Permissions match the allowlist."
+
       - name: Upload the bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
