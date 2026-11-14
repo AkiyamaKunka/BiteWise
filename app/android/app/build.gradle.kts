@@ -69,10 +69,12 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Permanent (owner, 2026-11-13): never change applicationId. A new id
+        // is a new app on Play and orphans every installed copy, whose meal
+        // log lives only on the phone. Play's app-signing key is the upload
+        // key the GitHub APKs are signed with, so both builds share it.
         applicationId = "dev.calorietracker.calorie_tracker"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Flutter's defaults: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -146,4 +148,10 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // The system Photo Picker contracts (MainActivity.pickImages) need
+    // 1.7.0 or later; 1.9.0 is what the plugins already resolve.
+    implementation("androidx.activity:activity-ktx:1.9.0")
+    // IntakeRulesTest (src/test): MainActivity's decisions on the JVM,
+    // `./gradlew :app:testDebugUnitTest` (mobile-build.yml).
+    testImplementation("junit:junit:4.13.2")
 }

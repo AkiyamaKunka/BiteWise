@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Gemini analysis and key validation need network. Flutter auto-adds
          this ONLY to the debug/profile manifest (for hot reload), so it must
          be declared here or release builds ship with no internet at all —
@@ -22,14 +23,36 @@
         android:maxSdkVersion="32"/>
     <!-- Meal-card / daily-report notifications (runtime permission, API 33+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- The OS-armed daily summary: flutter_local_notifications re-arms its
+         scheduled card after a reboot (ScheduledNotificationBootReceiver
+         below). WorkManager merges it in too; declared here because the
+         app relies on it. Inexact alarms only, so no exact-alarm
+         permission. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- WorkManager's library manifest brings FOREGROUND_SERVICE and its
+         SystemForegroundService (no type) for expedited work on Android 11
+         and lower and for setForeground. The app registers one periodic
+         task (lib/services/photo/background.dart) and never asks for
+         either, so both are stripped from the merged manifest. Expedited
+         or one-off work would need them back (manifest_gate_test). -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:node="remove"/>
     <!-- Backup: everything is backed up as before except files/bitewise_local/,
-         the backup-excluded local store (lib/services/local_store.dart):
-         res/xml/data_extraction_rules.xml on Android 12+, backup_rules.xml
-         below it. -->
+         the backup-excluded local store (lib/services/local_store.dart),
+         and flutter_secure_storage's files (the API keys, which no other
+         phone could decrypt): res/xml/data_extraction_rules.xml on Android
+         12+, backup_rules.xml below it.
+         hasFragileUserData: on Android 10+ the uninstall dialog offers to
+         keep the app's data, since the meal log lives only on the phone. A
+         reinstall with the same signer then finds the log. Should the
+         kept key store have lost its Keystore key, AndroidSecureKeyStore
+         (app_settings.dart) reads it as no key and the app asks again. -->
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:hasFragileUserData="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules">
         <!-- singleTask (review 171, C6): a share while the app runs reaches
@@ -80,6 +103,42 @@
                 <data android:mimeType="image/*"/>
             </intent-filter>
         </activity>
+        <!-- flutter_local_notifications' scheduled notifications (its
+             README, AndroidManifest.xml setup): the daily summary card the
+             OS posts at its time (zonedSchedule, inexactAllowWhileIdle),
+             and its re-arming after a reboot or an app update. Alarms do
+             not survive either. -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+        <!-- WorkManager's foreground service, stripped with its permission
+             above. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            tools:node="remove"/>
+        <!-- The system Photo Picker (MainActivity.pickImages) on Android 10
+             and lower (7-10 here: minSdk is 24): asks Google Play services
+             to install its backported picker module. Disabled and not
+             exported, a marker only; the class lives in Play services.
+             Without Play services the AndroidX contract falls back to
+             ACTION_OPEN_DOCUMENT itself.
+             (developer.android.com/training/data-storage/shared/photopicker) -->
+        <service
+            android:name="com.google.android.gms.metadata.ModuleDependencies"
+            android:enabled="false"
+            android:exported="false"
+            tools:ignore="MissingClass">
+            <intent-filter>
+                <action android:name="com.google.android.gms.metadata.MODULE_DEPENDENCIES"/>
+            </intent-filter>
+            <meta-data android:name="photopicker_activity:0:required" android:value=""/>
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
