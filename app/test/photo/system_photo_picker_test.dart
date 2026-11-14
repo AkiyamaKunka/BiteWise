@@ -255,12 +255,13 @@ void main() {
       expect((await picker().pick()).status, SystemPickStatus.unavailable);
     });
 
-    test('a build without the method reports missing (the screens keep '
-        'their old grid flow)', () async {
+    test('a build without the method is unavailable too: never the old '
+        'grid flow, whose library request is a dead end on the Play build',
+        () async {
       // No handler: MissingPluginException, as notImplemented() gives.
-      expect((await picker().pick()).status, SystemPickStatus.missing);
+      expect((await picker().pick()).status, SystemPickStatus.unavailable);
       answer((_) => throw MissingPluginException());
-      expect((await picker().pick()).status, SystemPickStatus.missing);
+      expect((await picker().pick()).status, SystemPickStatus.unavailable);
     });
   });
 

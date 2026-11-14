@@ -358,14 +358,6 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // a second analysis can never run beside one.
     if (!mounted || _busy) return;
     switch (pick.status) {
-      case SystemPickStatus.missing:
-        // A build without the native picker: the grid flow as before.
-        setState(() {
-          _pickerOnly = false;
-          _pickerRow = false;
-          _assets = _loadGrid();
-        });
-        return;
       case SystemPickStatus.unavailable:
         // No library request here: on the Play build it could only fail.
         // Over the grid the page note is not on screen: a snackbar says it.

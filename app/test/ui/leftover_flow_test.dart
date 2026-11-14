@@ -908,7 +908,7 @@ void main() {
         ]);
 
     Future<void> pumpPicker(WidgetTester tester, FakeSystemPicker system,
-        {FakeSettings? settings, bool grantOnRequest = false}) async {
+        {FakeSettings? settings}) async {
       tester.view.physicalSize = const Size(800, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -923,7 +923,7 @@ void main() {
                 picker: listing,
                 requestPhotoPermission: () async {
                   permissionRequests++;
-                  return grantOnRequest;
+                  return false; // the Play build: nothing to grant
                 },
                 openSystemSettings: () async {},
               ))));
@@ -1107,18 +1107,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(AppLocalizationsEn().addPickerUnavailable),
           findsOneWidget);
-      expect(find.byKey(const Key('leftoverPhoto-lp1')), findsOneWidget);
-    });
-
-    testWidgets('a build without the native picker keeps the old grid flow',
-        (tester) async {
-      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
-      final system = FakeSystemPicker(
-          replies: [const SystemPick(SystemPickStatus.missing)]);
-      await pumpPicker(tester, system, grantOnRequest: true);
-      await chooseMeal(tester);
-      expect(system.picks, [1]);
-      expect(permissionRequests, 1);
       expect(find.byKey(const Key('leftoverPhoto-lp1')), findsOneWidget);
     });
   });

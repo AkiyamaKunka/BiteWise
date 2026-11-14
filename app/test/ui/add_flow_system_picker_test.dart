@@ -100,11 +100,7 @@ IntakePhoto _gridPhoto(String id) => IntakePhoto(
     capturedAt: DateTime(2026, 11, 13, 9));
 
 class _World {
-  _World(
-      {bool full = false,
-      FakeSettings? settings,
-      this.outcome,
-      this.grantOnRequest = false})
+  _World({bool full = false, FakeSettings? settings, this.outcome})
       : library = _CountingLibrary(full: full),
         settings = settings ?? FakeSettings();
   final _CountingLibrary library;
@@ -112,10 +108,6 @@ class _World {
   final picker = _CountingPicker();
   final processed = <IntakePhoto>[];
   PhotoOutcome? outcome;
-
-  /// What services.requestPhotoPermission answers; false: the Play build,
-  /// which declares nothing to grant.
-  final bool grantOnRequest;
   int permissionRequests = 0;
 
   late final UiServices services = UiServices(
@@ -126,7 +118,7 @@ class _World {
     picker: picker,
     requestPhotoPermission: () async {
       permissionRequests++;
-      return grantOnRequest;
+      return false; // the Play build: nothing to grant
     },
     photoLibrary: library,
     openSystemSettings: () async {},
@@ -453,22 +445,6 @@ void main() {
       expect(_screen, findsOneWidget);
       expect(find.byKey(const Key('recentPhoto0')), findsOneWidget);
     });
-  });
-
-  testWidgets('a build without the native picker keeps the old grid flow',
-      (tester) async {
-    // MissingPluginException: the method is not there (a build from
-    // before the native half). The screen behaves as it did.
-    final w = _World(grantOnRequest: true);
-    w.picker.photos = [_gridPhoto('a0')];
-    final system = FakeSystemPicker(
-        replies: [const SystemPick(SystemPickStatus.missing)]);
-    await _open(tester,
-        AddPhotoScreen(services: w.services, systemPicker: system));
-    expect(system.picks, [1]);
-    expect(w.permissionRequests, 1, reason: 'the old flow asks, as before');
-    expect(find.byKey(const Key('recentPhoto0')), findsOneWidget);
-    expect(find.byKey(const Key('addChooseAllPhotos')), findsNothing);
   });
 
   testWidgets('openAddFlow hands both photo screens the platform picker',

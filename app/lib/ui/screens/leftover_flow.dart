@@ -434,14 +434,6 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     final pick = await system.pick(max: 1);
     if (!mounted) return null;
     switch (pick.status) {
-      case SystemPickStatus.missing:
-        // A build without the native picker: the grid flow as before.
-        setState(() {
-          _pickerOnly = false;
-          _pickerRow = false;
-          _assets = _loadGrid();
-        });
-        return null;
       case SystemPickStatus.unavailable:
         // No library request here: on the Play build it could only fail.
         // Over the grid the step's note is not on screen: a snackbar says it.

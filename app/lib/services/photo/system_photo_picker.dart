@@ -59,12 +59,11 @@ enum SystemPickStatus {
   /// Another pick (this one or Import's file picker) is still open.
   busy,
 
-  /// The picker could not open on this phone, or failed.
+  /// The picker could not open on this phone, or failed, or this build has
+  /// no native picker (MissingPluginException). The screens say so; they
+  /// never fall back to asking for the library, which on the Play build
+  /// (no photo permission declared) could only end at "isn't allowed".
   unavailable,
-
-  /// This build has no native picker (MissingPluginException): the caller
-  /// keeps the library grid as it was before the picker.
-  missing,
 }
 
 /// What [SystemPhotoPicker.pick] gave.
@@ -126,7 +125,7 @@ class SystemPhotoPicker {
       reply = await _channel
           .invokeMethod<Object?>(pickImagesMethod, {'max': limit});
     } on MissingPluginException {
-      return const SystemPick(SystemPickStatus.missing);
+      return const SystemPick(SystemPickStatus.unavailable);
     } on PlatformException {
       return const SystemPick(SystemPickStatus.unavailable);
     }
