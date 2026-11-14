@@ -3685,7 +3685,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsHealthReminder =>
-      'Chopstats is not medical advice. For decisions about your health or diet, consult a healthcare professional.';
+      'Chopstats does not give medical advice. For decisions about your health or diet, consult a healthcare professional.';
 
   @override
   String backupSizeNearLimit(String size) {

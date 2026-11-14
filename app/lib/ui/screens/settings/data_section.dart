@@ -562,7 +562,7 @@ class _DataSectionState extends State<DataSection> {
   /// Under them, on both platforms, the health reminder: Google Play's
   /// Health Content and Services policy asks apps to remind users to
   /// consult a healthcare professional (the full not-a-medical-device
-  /// disclaimer is in the store description).
+  /// disclaimer belongs in the store description).
   @override
   Widget build(BuildContext context) {
     final backup = widget.backup;

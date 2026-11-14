@@ -54,7 +54,8 @@ void main() {
       expect(e, contains('Import merges'));
       final z = zh.backupAndroidFooter;
       expect(z, contains('Google 账户'));
-      expect(z, contains('不包括 API 密钥'));
+      expect(z, contains('不包括 API Key'),
+          reason: 'the zh strings call it API Key everywhere');
       expect(z, contains('保存到设备'));
       expect(z, contains('导入会合并'));
     });
@@ -69,8 +70,8 @@ void main() {
     test('a short "not medical advice — ask a professional" line, both '
         'languages', () {
       expect(en.settingsHealthReminder,
-          'Chopstats is not medical advice. For decisions about your health '
-          'or diet, consult a healthcare professional.');
+          'Chopstats does not give medical advice. For decisions about your '
+          'health or diet, consult a healthcare professional.');
       expect(zh.settingsHealthReminder,
           '筷拍不提供医疗建议。涉及健康或饮食的决定，请咨询医疗专业人士。');
     });
