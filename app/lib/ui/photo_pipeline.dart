@@ -545,9 +545,18 @@ class PhotoPipeline {
   /// process() keeps announcing saves, leftover deductions and permanent
   /// failures itself (every path), so none of those is said twice, and the
   /// watcher's bind() stays quiet about them.
+  ///
+  /// BACKPRESSURE (review 171, C2): the subscription is paused from each
+  /// photo's arrival until its turn has ended, so the share intake reads
+  /// the next copy only then — one original resident, as bind() keeps the
+  /// watcher's. Without it every shared original sat chained on the tail
+  /// at once (a 40-photo share: about 160 MB).
   void bindStream(Stream<IntakePhoto> photos) {
-    _subs.add(photos.listen((p) {
+    late final StreamSubscription<IntakePhoto> sub;
+    sub = photos.listen((p) {
+      sub.pause();
       final slot = _chain(p);
+      slot.whenComplete(sub.resume).ignore();
       _tail = slot.then((o) {
         // A transient failure was released, and the share copy is already
         // gone: nothing will ever re-offer it, so silence read as "it
@@ -563,7 +572,8 @@ class PhotoPipeline {
           notify?.call(say);
         } catch (_) {}
       });
-    }, onError: (Object _) {}));
+    }, onError: (Object _) {});
+    _subs.add(sub);
   }
 
   Future<void> dispose() async {

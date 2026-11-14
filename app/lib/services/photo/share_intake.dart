@@ -176,35 +176,79 @@ class ShareIntake {
   /// Cold-start share first, then live shares for the app's lifetime.
   /// (Explicit controller, not async*: an async* generator parked on the
   /// live-share stream would defer subscription cancellation forever.)
+  ///
+  /// BACKPRESSURE (review 171, C2): a copy is read only while the listener
+  /// is not paused. The pipeline pauses the stream until each photo's turn
+  /// ends (PhotoPipeline.bindStream), and the consent gate while it asks,
+  /// so a 40-photo share holds one original in memory, plus at most one
+  /// read ahead — not all 40 (about 160 MB) in the stream's buffer. The
+  /// copies wait in the share folder meanwhile. Batches are read one after
+  /// another, in order.
   Stream<IntakePhoto> photos() {
     late final StreamController<IntakePhoto> controller;
     StreamSubscription<List<String>>? liveSub;
     var cancelled = false;
+    Completer<void>? resumed;
+    var reading = Future<void>.value();
+
+    void wake() {
+      final r = resumed;
+      resumed = null;
+      r?.complete();
+    }
 
     Future<void> emitPaths(List<String> paths) async {
       for (final path in paths) {
-        final photo = await _fromPath(path);
+        while (controller.isPaused && !cancelled) {
+          await (resumed ??= Completer<void>()).future;
+        }
+        if (cancelled || controller.isClosed) {
+          // Not read, but not left in the cache either.
+          await _discard(path);
+          continue;
+        }
+        final IntakePhoto? photo;
+        try {
+          photo = await _fromPath(path);
+        } catch (_) {
+          continue; // one bad copy (already deleted) never stops the rest
+        }
         if (photo != null && !cancelled && !controller.isClosed) {
           controller.add(photo);
         }
       }
     }
 
+    // One reader, batch after batch: a failure cannot break the chain, or
+    // every later share would wait behind it for good.
+    void enqueue(List<String> paths) => reading =
+        reading.then((_) => emitPaths(paths)).catchError((Object _) {});
+
     controller = StreamController<IntakePhoto>(
       onListen: () async {
-        await emitPaths(await _source.initialImagePaths());
+        final initial = await _source.initialImagePaths();
         if (cancelled) return;
-        liveSub = _source.imagePathBatches().listen(
-            (batch) => unawaited(emitPaths(batch)),
+        enqueue(initial);
+        // Listened for at once, not after the launch share is read: the
+        // plugin drops a share that arrives while nobody listens, and the
+        // launch share may now wait on the pipeline for minutes.
+        liveSub = _source.imagePathBatches().listen(enqueue,
             onError: controller.addError,
-            onDone: controller.close);
+            onDone: () => reading = reading.then((_) => controller.close()));
       },
+      onResume: wake,
       onCancel: () async {
         cancelled = true;
+        wake();
         await liveSub?.cancel();
       },
     );
     return controller.stream;
+  }
+
+  /// Deletes [path] unread when it is a copy this intake may delete.
+  Future<void> _discard(String path) async {
+    if (await _isShareCopy(path)) await _cleanup(path);
   }
 
   /// Whether [path] is a copy this intake may read and delete.

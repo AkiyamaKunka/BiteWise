@@ -12,10 +12,13 @@ import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
     show looksLikeJpeg;
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/share_intake.dart';
+import 'package:calorie_tracker/ui/ai_consent.dart' show SharedPhotoConsentGate;
+import 'package:calorie_tracker/ui/photo_pipeline.dart' show PhotoPipeline;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
+import '../ui/fakes.dart' show FakeAnalyzer, FakeDao, FakeSettings;
 import 'watcher_test.dart' show FakeAsset, FakePhotoLibrary;
 
 class FakeShareSource implements SharedMediaSource {
@@ -435,6 +438,179 @@ void main() {
           await build(FakeShareSource(), library).pickFromRecent(1);
       expect(picked.single.capture!.createDate, created);
       expect(picked.single.capture!.device, CaptureDevice.unknown);
+    });
+  });
+
+  // Review 171, C2: a 40-photo SEND_MULTIPLE was read whole before the
+  // first photo's analysis ended — every original in the stream's buffer
+  // at once (about 160 MB), while the pipeline processes one at a time.
+  // The share stream now honours pause, and bindStream pauses it until
+  // each photo's turn has ended: one original resident, plus at most one
+  // read ahead.
+  group('backpressure (C2): one shared original in memory at a time', () {
+    late Map<String, Uint8List> held;
+    late List<String> reads;
+
+    ShareIntake counting(FakeShareSource source) => ShareIntake(
+        source: source,
+        library: FakePhotoLibrary(),
+        readBytes: (path) async {
+          reads.add(path);
+          return held[path];
+        },
+        cleanup: (path) async => cleaned.add(path),
+        clock: () => now);
+
+    List<String> share(int n, {String prefix = 'IMG'}) => [
+          for (var i = 0; i < n; i++)
+            '/shared/${prefix}_$i.jpg',
+        ]..forEach((p) => held[p] = Uint8List.fromList([p.hashCode & 0xFF, 1]));
+
+    setUp(() {
+      held = {};
+      reads = [];
+    });
+
+    test('a paused listener stops the reading; resume reads on, in order',
+        () async {
+      final source = FakeShareSource();
+      final paths = share(20);
+      final emitted = <String>[];
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((p) {
+        emitted.add(p.fileName);
+        sub.pause();
+      });
+      source.controller.add(paths);
+      await pumpEventQueue();
+      expect(emitted, hasLength(1));
+      expect(reads.length, lessThanOrEqualTo(2),
+          reason: 'one handed on, at most one read ahead');
+      sub.resume();
+      await pumpEventQueue();
+      expect(emitted, hasLength(2));
+      expect(reads.length, lessThanOrEqualTo(3));
+      // Keep going without pausing: everything arrives, in order.
+      sub.onData((p) => emitted.add(p.fileName));
+      sub.resume();
+      await pumpEventQueue();
+      expect(emitted, [for (final p in paths) fileBaseName(p)]);
+      expect(cleaned, paths, reason: 'every copy still deleted once read');
+      await sub.cancel();
+    });
+
+    test('a batch shared while one is still read waits its turn: the order '
+        'is kept and only one reader runs', () async {
+      final source = FakeShareSource();
+      final first = share(3, prefix: 'A');
+      final second = share(3, prefix: 'B');
+      final emitted = <String>[];
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((p) {
+        emitted.add(p.fileName);
+        sub.pause();
+      });
+      source.controller
+        ..add(first)
+        ..add(second);
+      await pumpEventQueue();
+      expect(reads.length, lessThanOrEqualTo(2),
+          reason: 'not one reader per batch');
+      for (var i = 0; i < 6; i++) {
+        sub.resume();
+        await pumpEventQueue();
+      }
+      expect(emitted, [for (final p in [...first, ...second]) fileBaseName(p)]);
+      await sub.cancel();
+    });
+
+    test('a live share is listened for while the launch share is still '
+        'held (the plugin drops a share nobody listens for)', () async {
+      final source = FakeShareSource()..initial = share(5, prefix: 'L');
+      var listened = false;
+      source.controller.onListen = () => listened = true;
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((_) => sub.pause());
+      await pumpEventQueue();
+      expect(listened, isTrue);
+      await sub.cancel();
+    });
+
+    test('a copy whose reading throws is skipped, and the shares after it '
+        'still arrive', () async {
+      final source = FakeShareSource();
+      final paths = share(3);
+      final intake = ShareIntake(
+          source: source,
+          library: FakePhotoLibrary(),
+          readBytes: (path) async {
+            reads.add(path);
+            if (path == paths[1]) throw const FileSystemException('gone');
+            return held[path];
+          },
+          cleanup: (path) async => cleaned.add(path),
+          clock: () => now);
+      final emitted = <String>[];
+      final sub = intake.photos().listen((p) => emitted.add(p.fileName));
+      source.controller.add(paths);
+      await pumpEventQueue();
+      final later = share(1, prefix: 'later');
+      source.controller.add(later);
+      await pumpEventQueue();
+      expect(emitted,
+          [fileBaseName(paths[0]), fileBaseName(paths[2]), 'later_0.jpg']);
+      expect(cleaned, [...paths, ...later]);
+      await sub.cancel();
+    });
+
+    test('cancelled while paused: the unread copies are deleted unread',
+        () async {
+      final source = FakeShareSource();
+      final paths = share(6);
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((_) => sub.pause());
+      source.controller.add(paths);
+      await pumpEventQueue();
+      final readBefore = reads.length;
+      await sub.cancel();
+      await pumpEventQueue();
+      expect(reads.length, readBefore, reason: 'nothing more is read');
+      expect(cleaned.toSet(), paths.toSet(),
+          reason: 'no copy left behind in the cache');
+    });
+
+    test('a 20-photo share through the consent gate and the pipeline, the '
+        'first analysis held: at most 2 originals are read', () async {
+      final source = FakeShareSource();
+      final paths = share(20);
+      final release = Completer<void>();
+      var analyses = 0;
+      final analyzer = FakeAnalyzer()
+        ..onAnalyze = () async {
+          analyses++;
+          if (analyses == 1) await release.future;
+        };
+      final pipeline = PhotoPipeline(
+          dao: FakeDao(),
+          analyzer: analyzer,
+          hasher: (b) async => 'h${b[0]}-${b.length}',
+          thumbnailer: (_) async => null);
+      pipeline.bindStream(SharedPhotoConsentGate(FakeSettings())
+          .gate(counting(source).photos()));
+      source.controller.add(paths);
+      await pumpEventQueue(times: 50);
+
+      expect(analyses, 1);
+      expect(reads.length, lessThanOrEqualTo(2),
+          reason: 'the stream buffered every original while photo 1 was '
+              'analyzed');
+
+      release.complete();
+      await pumpEventQueue(times: 400);
+      expect(reads, paths, reason: 'all read in the end, in order');
+      expect(analyses, 20);
+      expect(cleaned, paths);
+      await pipeline.dispose();
     });
   });
 }
