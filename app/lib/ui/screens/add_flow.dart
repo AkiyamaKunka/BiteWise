@@ -191,6 +191,11 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   /// Set while the picker is open: one pick at a time.
   bool _picking = false;
 
+  /// One photo at a time, from the grid or the picker: a grid tap while
+  /// the picker was opening ran a second analysis beside the picked
+  /// photo's, two dialogs stacked (review 2026-11-13).
+  bool get _busy => _analyzing || _askingConsent || _picking;
+
   @override
   void initState() {
     super.initState();
@@ -305,7 +310,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // BUILD, so two taps in the same frame both pass that check and run
     // two analyses — two model calls, two ledger reservations, for one
     // meal (review 2026-07-31).
-    if (_analyzing || _askingConsent) return;
+    if (_busy) return;
     // App Store 5.1.2(i): permission for this AI recipient before the
     // photo's bytes are even read. Without the spinner: an animating
     // overlay behind a dialog never settles.
@@ -332,13 +337,12 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   /// a cancelled pick closes it — there is nothing else on it to do.
   Future<void> _openSystemPicker({required bool leaveOnCancel}) async {
     final system = widget.systemPicker;
-    if (system == null || !mounted) return;
-    if (_analyzing || _askingConsent || _picking) return;
+    if (system == null || !mounted || _busy) return;
     // Consent before any photo is chosen, as for a grid tap (5.1.2(i)).
     _askingConsent = true;
     final allowed = await ensureAiConsent(context, widget.services.settings);
     _askingConsent = false;
-    if (!mounted || _analyzing || _picking) return;
+    if (!mounted || _busy) return;
     if (!allowed) {
       if (leaveOnCancel) _leave();
       return;
@@ -350,7 +354,9 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     } finally {
       _picking = false;
     }
-    if (!mounted) return;
+    // Nothing else can have started meanwhile ([_busy]); checked again so
+    // a second analysis can never run beside one.
+    if (!mounted || _busy) return;
     switch (pick.status) {
       case SystemPickStatus.missing:
         // A build without the native picker: the grid flow as before.
