@@ -339,6 +339,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // One question at a time: the consent-update one answers first.
     await _consentUpdateAnswered();
     if (!mounted) return;
+    final settings = widget.services.settings;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -351,10 +352,21 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         // dialog names the company the server passes the data to.
         content: SingleChildScrollView(
           child: Text([
+            // Watch Camera Roll on: from the confirm on, every new library
+            // photo (non-food too) goes to this server. Said first, as the
+            // recipient-change dialog does (confirmAiRecipientChange).
+            if (settings.watcherEnabled)
+              ctx.l10n.watcherDisclosureBody(
+                  providerDisplayLabel(ctx.l10n, 'server', link.backend),
+                  settings.lookbackDays.clamp(1, 30)),
             ctx.l10n.setupLinkBody(
                 link.server,
                 providerDisplayLabel(ctx.l10n, 'server', link.backend),
                 link.keyTail),
+            // A plain-http server gets the photos, meal text and upload
+            // key unencrypted (Play's User Data policy wants modern
+            // cryptography in transit).
+            if (_isPlainHttp(link.server)) ctx.l10n.setupLinkCleartext,
             ctx.l10n.setupLinkSharing(aiConsentCompanyName(ctx.l10n,
                 provider: 'server', serverBackend: link.backend)),
             // The same mainland-China note the consent dialog adds: this
@@ -377,7 +389,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       ),
     );
     if (ok != true || !mounted) return;
-    final s = widget.services.settings;
+    final s = settings;
     // The confirmation named the plan's AI company: it is the consent for
     // that recipient, saved before anything can be sent to it.
     await s.setAiConsent(aiConsentRoute('server', link.backend),
@@ -393,6 +405,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(l.setupLinkDone)));
   }
+
+  /// A link's server origin over plain http (parseSetupLink keeps the
+  /// scheme lower-case; any case is checked anyway).
+  static bool _isPlainHttp(String server) =>
+      Uri.tryParse(server)?.scheme.toLowerCase() == 'http';
 
   /// The restaurant assist paused for a consent that does not name the
   /// recipient a lookup would reach now (another provider or server, design
