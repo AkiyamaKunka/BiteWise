@@ -1087,6 +1087,73 @@ void main() {
       }
     });
   });
+  // Review finding M1: the policy, the listing and § 6 state facts that
+  // other lanes' code delivers. These gates read that code as text, so this
+  // branch cannot merge with docs that are ahead of the app. They fail
+  // until android/privacy, android/native and android/photos are merged.
+  group('gates: what the docs say, the code has', () {
+    test('plain-http servers are refused (privacy lane, decision 2)', () {
+      final f = File('${_appRoot().path}/lib/core/server_transport.dart');
+      expect(f.existsSync(), isTrue, reason: 'android/privacy not merged');
+      expect(
+          RegExp(r'^const bool kRequireHttpsServer = true;$', multiLine: true)
+              .hasMatch(f.readAsStringSync()),
+          isTrue);
+    });
+
+    test("API keys stay out of Android's backup and device transfer "
+        '(native lane)', () {
+      const files = [
+        'FlutterSecureStorage.xml',
+        'FlutterSecureKeyStorage.xml',
+        'FlutterSecureStorageConfiguration.xml',
+        'FlutterSecureStorageConfiguration:FlutterSecureStorage.xml',
+      ];
+      String section(String xml, String tag) {
+        final m = RegExp('<$tag>(.*?)</$tag>', dotAll: true).firstMatch(xml);
+        expect(m, isNotNull, reason: tag);
+        return m!.group(1)!;
+      }
+
+      final rules = _read('android/app/src/main/res/xml/data_extraction_rules.xml');
+      final legacy = _read('android/app/src/main/res/xml/backup_rules.xml');
+      for (final (name, block) in [
+        ('cloud-backup', section(rules, 'cloud-backup')),
+        ('device-transfer', section(rules, 'device-transfer')),
+        ('full-backup-content', section(legacy, 'full-backup-content')),
+      ]) {
+        for (final file in files) {
+          expect(block, contains('<exclude domain="sharedpref" path="$file"/>'),
+              reason: '$name $file');
+        }
+      }
+    });
+
+    test('the app reminds users to consult a healthcare professional '
+        '(privacy lane)', () {
+      final en = (jsonDecode(_read('lib/l10n/app_en.arb')) as Map)
+          .cast<String, Object?>();
+      final zh = (jsonDecode(_read('lib/l10n/app_zh.arb')) as Map)
+          .cast<String, Object?>();
+      expect(en['settingsHealthReminder'],
+          contains('consult a healthcare professional'));
+      expect(zh['settingsHealthReminder'], contains('请咨询医疗专业人士'));
+      expect(_read('lib/ui/screens/settings/data_section.dart'),
+          contains('settingsHealthReminder'));
+    });
+
+    test("Log › From recent photos uses Android's photo picker "
+        '(photos lane)', () {
+      expect(
+          File('${_appRoot().path}/lib/services/photo/system_photo_picker.dart')
+              .existsSync(),
+          isTrue,
+          reason: 'android/photos not merged');
+      expect(_read('lib/ui/screens/add_flow.dart'),
+          contains('platformSystemPhotoPicker()'));
+    });
+  });
+
   group('review fixes: release.yml, scripts and § 6', () {
     final workflow = _readRepo('.github/workflows/release.yml');
 
