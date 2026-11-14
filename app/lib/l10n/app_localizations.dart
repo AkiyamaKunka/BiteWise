@@ -3729,7 +3729,7 @@ abstract class AppLocalizations {
   /// No description provided for @watcherLimitedAccess.
   ///
   /// In en, this message translates to:
-  /// **'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.'**
+  /// **'Only selected photos are shared, so new food photos won\'t be seen automatically. Allow access to all photos for automatic logging.'**
   String get watcherLimitedAccess;
 
   /// First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn).
@@ -5482,6 +5482,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'A card for each meal logged automatically from your camera roll'**
   String get notificationMealChannelDescription;
+
+  /// Settings › Photos, Android only: a link under the footer while Watch Camera Roll is on and Photos access is partial. It shows Android 14+'s own dialog to change the selection or allow all photos (App info when that cannot help).
+  ///
+  /// In en, this message translates to:
+  /// **'Allow access to all photos'**
+  String get watcherAllowAllPhotos;
 }
 
 class _AppLocalizationsDelegate

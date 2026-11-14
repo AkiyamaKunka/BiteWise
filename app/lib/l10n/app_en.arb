@@ -1917,7 +1917,7 @@
     }
   },
   "autoScanPausedTitle": "Photos are not being logged automatically",
-  "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
+  "watcherLimitedAccess": "Only selected photos are shared, so new food photos won't be seen automatically. Allow access to all photos for automatic logging.",
   "watcherLimitedFooter": "Chopstats can't see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.",
   "@watcherLimitedFooter": {
     "description": "First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn)."
@@ -3454,5 +3454,9 @@
   "notificationMealChannelDescription": "A card for each meal logged automatically from your camera roll",
   "@notificationMealChannelDescription": {
     "description": "The meal-card channel's description, shown under its name in the system notification settings."
+  },
+  "watcherAllowAllPhotos": "Allow access to all photos",
+  "@watcherAllowAllPhotos": {
+    "description": "Settings › Photos, Android only: a link under the footer while Watch Camera Roll is on and Photos access is partial. It shows Android 14+'s own dialog to change the selection or allow all photos (App info when that cannot help)."
   }
 }

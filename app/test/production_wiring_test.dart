@@ -795,6 +795,23 @@ void main() {
           reason: 'init runs at every start, in every engine');
     });
 
+    // The Play push: meal cards have their own channel, named in the app
+    // language like the summary's, in both engines.
+    test('both engines name both channels in the app language', () {
+      for (final path in ['lib/ui/di.dart', 'lib/ui/background_glue.dart']) {
+        final source = _source(path);
+        expect(
+          source,
+          _wired(
+            r'channelStrings: \(\) => notificationChannelFor\(settings\.appLanguage\), '
+            r'mealChannelStrings: \(\) => '
+            r'mealNotificationChannelFor\(settings\.appLanguage\),',
+          ),
+          reason: path,
+        );
+      }
+    });
+
     test('the background run re-arms it on both platforms and posts '
         'nothing itself', () {
       final glue = _source('lib/ui/background_glue.dart');

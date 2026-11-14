@@ -429,15 +429,16 @@ class _SettingsScreenState extends State<SettingsScreen>
       _photosLimited = limited; // the footer line; setState follows below
       if (limited) {
         if (!mounted) return;
-        final open = widget.openSystemSettings;
+        final canFix =
+            widget.openSystemSettings != null || _fixesPhotoAccessInPlace;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            persist: _holdForScreenReader(context, hasAction: open != null),
+            persist: _holdForScreenReader(context, hasAction: canFix),
             duration: _actionSnackBarDuration,
             content: Text(l10n.watcherLimitedAccess),
-            action: open == null
+            action: !canFix
                 ? null
                 : SnackBarAction(
-                    label: l10n.fixAction, onPressed: () => open())));
+                    label: l10n.fixAction, onPressed: _fixPhotoAccess)));
       }
       // Instant feedback on enable: sweep the lookback window right away
       // instead of waiting for the next change event / background run.
@@ -455,6 +456,27 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!mounted) return;
     setState(() => _watcherEnabled = enable);
     await widget.settings.update(watcherEnabled: enable);
+  }
+
+  /// Android: partial photo access is fixed in place, with Android 14+'s
+  /// own reselect dialog (Play push). iOS keeps system settings.
+  bool get _fixesPhotoAccessInPlace =>
+      defaultTargetPlatform == TargetPlatform.android;
+
+  /// The Fix for photo access that is not full: on Android the reselect
+  /// dialog (reselectPhotoAccess), or system settings when it cannot help
+  /// (no access before or after it: a permanent denial, below Android 14,
+  /// an error); on iOS system settings. Then the footer line re-reads the
+  /// access.
+  Future<void> _fixPhotoAccess() async {
+    final open = widget.openSystemSettings;
+    if (_fixesPhotoAccessInPlace) {
+      final fix = await reselectPhotoAccess();
+      if (fix == PhotoAccessFix.openSettings) await open?.call();
+      await _probePhotoAccess();
+      return;
+    }
+    await open?.call();
   }
 
   Future<void> _toggleWatchGlasses(bool include) async {
@@ -808,6 +830,25 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   /// Camera-roll watching, coverage audit, backfill window.
   List<Widget> _photoSection(ThemeData theme) => [
+        ..._photoGroup(theme),
+        // Android: under the footer's 'can't see all your photos' line,
+        // the fix itself (the reselect dialog), not a trip to App info.
+        if (_watcherEnabled && _photosLimited && _fixesPhotoAccessInPlace)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                kGroupInset + AppSpace.s4, 0, kGroupInset, 0),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                key: const Key('photosAllowAllLink'),
+                onPressed: _fixPhotoAccess,
+                child: Text(context.l10n.watcherAllowAllPhotos),
+              ),
+            ),
+          ),
+      ];
+
+  List<Widget> _photoGroup(ThemeData theme) => [
         GroupedSection(
           header: context.l10n.settingsSectionPhotos,
           footer: _photosFooter(),

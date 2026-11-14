@@ -161,8 +161,8 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
 /// (leftoverLoadFailed, leftoverSaveFailed), then the Android background
 /// lane's block (summaryBatteryRestrictedHint, notificationsAllowAction,
-/// notificationMealChannelName/Description, …).
-const _keyCount = 894;
+/// notificationMealChannelName/Description, watcherAllowAllPhotos).
+const _keyCount = 895;
 
 Directory _appRoot() {
   var dir = Directory.current;

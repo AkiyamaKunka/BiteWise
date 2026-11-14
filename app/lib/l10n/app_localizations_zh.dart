@@ -2216,7 +2216,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watcherLimitedAccess =>
-      '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。';
+      '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请允许访问所有照片，才能自动记录。';
 
   @override
   String get watcherLimitedFooter =>
@@ -3265,4 +3265,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationMealChannelDescription => '从相册自动记录每一餐时发送的卡片';
+
+  @override
+  String get watcherAllowAllPhotos => '允许访问所有照片';
 }

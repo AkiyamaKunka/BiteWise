@@ -720,7 +720,7 @@
     }
   },
   "autoScanPausedTitle": "照片暂时不会自动记录",
-  "watcherLimitedAccess": "目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。",
+  "watcherLimitedAccess": "目前只共享了部分选中的照片，新的食物照片不会被自动看到。请允许访问所有照片，才能自动记录。",
   "watcherLimitedFooter": "筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。",
   "fixAction": "去修复",
   "importDialogTitle": "导入已导出的数据",
@@ -1011,5 +1011,6 @@
   "summaryBatteryRestrictedHint": "电池使用受限 —— 每日总结无法送达。",
   "notificationsAllowAction": "允许通知",
   "notificationMealChannelName": "自动记录的餐食",
-  "notificationMealChannelDescription": "从相册自动记录每一餐时发送的卡片"
+  "notificationMealChannelDescription": "从相册自动记录每一餐时发送的卡片",
+  "watcherAllowAllPhotos": "允许访问所有照片"
 }

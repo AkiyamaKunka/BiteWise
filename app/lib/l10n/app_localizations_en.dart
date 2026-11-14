@@ -2407,7 +2407,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get watcherLimitedAccess =>
-      'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.';
+      'Only selected photos are shared, so new food photos won\'t be seen automatically. Allow access to all photos for automatic logging.';
 
   @override
   String get watcherLimitedFooter =>
@@ -3633,4 +3633,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get notificationMealChannelDescription =>
       'A card for each meal logged automatically from your camera roll';
+
+  @override
+  String get watcherAllowAllPhotos => 'Allow access to all photos';
 }
