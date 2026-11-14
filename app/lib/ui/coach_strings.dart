@@ -34,15 +34,26 @@ CoachStrings coachStringsFor(String appLanguage) {
   );
 }
 
-/// The Android notification channel's name/description in the app
-/// language — Android shows them in its own Settings and in a card's
-/// long-press menu, and never translates them itself.
+/// The daily summary's Android notification channel, name and
+/// description, in the app language — Android shows them in its own
+/// Settings and in a card's long-press menu, and never translates them
+/// itself.
 ({String name, String description}) notificationChannelFor(
     String appLanguage) {
   final l = localizationsFor(appLanguage);
   return (
     name: l.notificationChannelName,
     description: l.notificationChannelDescription,
+  );
+}
+
+/// The meal cards' Android channel (Play push), likewise.
+({String name, String description}) mealNotificationChannelFor(
+    String appLanguage) {
+  final l = localizationsFor(appLanguage);
+  return (
+    name: l.notificationMealChannelName,
+    description: l.notificationMealChannelDescription,
   );
 }
 

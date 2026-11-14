@@ -2868,16 +2868,16 @@ abstract class AppLocalizations {
   /// **'🍽️ Leftovers deducted'**
   String get mealCardLeftoverTitle;
 
-  /// Android notification channel name: shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
+  /// The daily summary's Android notification channel (its id is the one every install has had, so the user's settings on it survive; until the Play push it was 'Reports & meals' and also carried the meal cards). Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
   ///
   /// In en, this message translates to:
-  /// **'Reports & meals'**
+  /// **'Daily summary'**
   String get notificationChannelName;
 
-  /// Android notification channel description, shown under the channel name in the system notification settings.
+  /// The daily summary channel's description, shown under its name in the system notification settings.
   ///
   /// In en, this message translates to:
-  /// **'Daily calorie reports and auto-logged meal cards'**
+  /// **'Your calorie summary, at the time you set'**
   String get notificationChannelDescription;
 
   /// No description provided for @dayLoadFailed.
@@ -5470,6 +5470,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Allow notifications'**
   String get notificationsAllowAction;
+
+  /// Android notification channel for the cards posted when a meal is logged automatically from the camera roll (and when automatic logging pauses), separate from the daily summary's channel since the Play push. Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu; re-sent in the app language on every post.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged meals'**
+  String get notificationMealChannelName;
+
+  /// The meal-card channel's description, shown under its name in the system notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'A card for each meal logged automatically from your camera roll'**
+  String get notificationMealChannelDescription;
 }
 
 class _AppLocalizationsDelegate

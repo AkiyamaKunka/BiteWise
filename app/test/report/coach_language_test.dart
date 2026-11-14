@@ -152,15 +152,28 @@ void main() {
     expect(summaryIn('zh', meals: 1).body, endsWith('1 餐 · 蛋白质 100 克'));
   });
 
-  test('the Android channel name follows the app language too', () {
+  test('the Android channel names follow the app language too', () {
     // 设置 › 应用 › 筷拍 › 通知 showed "Reports & meals" under a Chinese app.
+    // Two channels since the Play push: the summary's, and the meal cards'.
     final zh = notificationChannelFor('zh');
-    expect(zh.name, '总结与餐食');
-    expect(zh.description, '每日热量总结和自动记录的餐食卡片');
-    expect(RegExp(r'[a-zA-Z]').hasMatch(zh.name + zh.description), isFalse);
+    expect(zh.name, '每日总结');
+    expect(zh.description, '在你设定的时间发送当天的热量总结');
+    final zhMeals = mealNotificationChannelFor('zh');
+    expect(zhMeals.name, '自动记录的餐食');
+    expect(zhMeals.description, '从相册自动记录每一餐时发送的卡片');
+    expect(
+        RegExp(r'[a-zA-Z]').hasMatch(zh.name +
+            zh.description +
+            zhMeals.name +
+            zhMeals.description),
+        isFalse);
     final en = notificationChannelFor('en');
-    expect(en.name, 'Reports & meals');
-    expect(en.description, 'Daily calorie reports and auto-logged meal cards');
+    expect(en.name, 'Daily summary');
+    expect(en.description, 'Your calorie summary, at the time you set');
+    final enMeals = mealNotificationChannelFor('en');
+    expect(enMeals.name, 'Logged meals');
+    expect(enMeals.description,
+        'A card for each meal logged automatically from your camera roll');
   });
 
   test('an unknown/system language still produces a usable notification',

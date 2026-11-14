@@ -4,7 +4,9 @@
 library;
 
 import 'package:calorie_tracker/services/report/notifications.dart';
+import 'package:calorie_tracker/ui/theme/tokens.dart' show AppColors;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:timezone/timezone.dart' show TZDateTime;
 
@@ -51,6 +53,7 @@ class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
   final zoned = <({int id, TZDateTime when, String? payload,
       AndroidScheduleMode mode})>[];
   final pending = <PendingNotificationRequest>[];
+  final zonedDetails = <NotificationDetails?>[];
 
   @override
   Future<void> zonedSchedule({
@@ -69,6 +72,7 @@ class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
       payload: payload,
       mode: androidScheduleMode
     ));
+    zonedDetails.add(notificationDetails);
     pending
       ..removeWhere((p) => p.id == id)
       ..add(PendingNotificationRequest(id, title, body, payload));
@@ -84,16 +88,40 @@ class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
       android is T ? android as T : null;
 }
 
-/// The Android side: records the channels created and permission asks.
+/// The Android side: records the channels created and permission asks,
+/// and keeps the channel list as Android would (an existing channel keeps
+/// its importance; only its name and description follow a create).
 class _FakeAndroid extends Fake
     implements AndroidFlutterLocalNotificationsPlugin {
+  _FakeAndroid(
+      {List<AndroidNotificationChannel> existing = const [], this.refuse})
+      : live = {for (final c in existing) c.id: c};
+
   final channels = <AndroidNotificationChannel>[];
+  final Map<String, AndroidNotificationChannel> live;
   int permissionRequests = 0;
+
+  /// A channel id whose creation throws, as Android would for one it
+  /// refuses.
+  final String? refuse;
 
   @override
   Future<void> createNotificationChannel(
-          AndroidNotificationChannel notificationChannel) async =>
-      channels.add(notificationChannel);
+      AndroidNotificationChannel notificationChannel) async {
+    if (notificationChannel.id == refuse) {
+      throw PlatformException(code: 'refused');
+    }
+    channels.add(notificationChannel);
+    final old = live[notificationChannel.id];
+    live[notificationChannel.id] = AndroidNotificationChannel(
+        notificationChannel.id, notificationChannel.name,
+        description: notificationChannel.description,
+        importance: old?.importance ?? notificationChannel.importance);
+  }
+
+  @override
+  Future<List<AndroidNotificationChannel>?> getNotificationChannels() async =>
+      live.values.toList();
 
   @override
   Future<bool?> requestNotificationsPermission() async {
@@ -347,26 +375,31 @@ void main() {
     final notifier = ReportNotifier(
       plugin: plugin,
       channelStrings: () => language == 'zh'
-          ? (name: '总结与餐食', description: '每日热量总结和自动记录的餐食卡片')
-          : (name: 'Reports & meals', description: 'Daily reports'),
+          ? (name: '每日总结', description: '在你设定的时间发送当天的热量总结')
+          : (name: 'Daily summary', description: 'Your summary'),
+      mealChannelStrings: () => language == 'zh'
+          ? (name: '自动记录的餐食', description: '从相册自动记录每一餐时发送的卡片')
+          : (name: 'Logged meals', description: 'A card per meal'),
     );
     await notifier.init();
     await notifier.showMealCard('🍽️ 已自动记录一餐', '约 450 千卡');
     final zh = plugin.shown.single!.android!;
-    expect(zh.channelName, '总结与餐食');
-    expect(zh.channelDescription, '每日热量总结和自动记录的餐食卡片');
+    expect(zh.channelName, '自动记录的餐食');
+    expect(zh.channelDescription, '从相册自动记录每一餐时发送的卡片');
     // `update` never creates a MISSING channel: on a fresh install every
     // card was dropped. Renaming is the channel sync's job (below).
     expect(zh.channelAction,
         AndroidNotificationChannelAction.createIfNotExists);
-    expect(zh.channelId, 'calorietracker_reports',
-        reason: 'a new id would orphan the old channel and its toggles');
+    expect(zh.channelId, ReportNotifier.mealChannelId);
     expect(zh.icon, ReportNotifier.androidSmallIcon);
 
     // Read at post time: switching 语言 flips the next card, no restart.
     language = 'en';
     await notifier.showDailySummary('Today', '1800 kcal');
-    expect(plugin.shown.last!.android!.channelName, 'Reports & meals');
+    final summary = plugin.shown.last!.android!;
+    expect(summary.channelName, 'Daily summary');
+    expect(summary.channelId, 'calorietracker_reports',
+        reason: 'a new id would orphan the old channel and its toggles');
   });
 
   // A fresh Android install has no channel, and a post naming
@@ -382,26 +415,112 @@ void main() {
     final notifier = ReportNotifier(
       plugin: plugin,
       channelStrings: () => language == 'zh'
-          ? (name: '总结与餐食', description: '每日热量总结和自动记录的餐食卡片')
-          : (name: 'Reports & meals', description: 'Daily reports'),
+          ? (name: '每日总结', description: '在你设定的时间发送当天的热量总结')
+          : (name: 'Daily summary', description: 'Your summary'),
+      mealChannelStrings: () => language == 'zh'
+          ? (name: '自动记录的餐食', description: '从相册自动记录每一餐时发送的卡片')
+          : (name: 'Logged meals', description: 'A card per meal'),
     );
     await notifier.init();
-    final created = android.channels.single;
-    expect(created.id, 'calorietracker_reports');
-    expect(created.name, '总结与餐食');
-    expect(created.description, '每日热量总结和自动记录的餐食卡片');
-    expect(created.importance, Importance.defaultImportance);
+    expect(android.channels.map((c) => c.id),
+        ['calorietracker_reports', ReportNotifier.mealChannelId]);
+    final summary = android.channels.first, meals = android.channels.last;
+    expect(summary.name, '每日总结');
+    expect(meals.name, '自动记录的餐食');
+    expect(meals.description, '从相册自动记录每一餐时发送的卡片');
+    for (final c in android.channels) {
+      expect(c.importance, Importance.defaultImportance);
+    }
 
     await notifier.showMealCard('🍽️ 已自动记录一餐', '约 450 千卡');
     final posted = plugin.shown.single!.android!;
-    expect(posted.channelId, created.id,
+    expect(posted.channelId, meals.id,
         reason: 'a card on another id would land on a missing channel');
-    expect(posted.importance, created.importance);
+    expect(posted.importance, meals.importance);
 
     language = 'en';
     await notifier.showDailySummary('Today', '1800 kcal');
-    expect(android.channels.last.name, 'Reports & meals',
+    expect(plugin.shown.last!.android!.channelId, summary.id);
+    expect(android.live[summary.id]!.name, 'Daily summary',
         reason: 'an existing channel is renamed on the next post');
+    expect(android.live[meals.id]!.name, 'Logged meals');
+  });
+
+  // The Play push (2026-11-13): one channel carried everything, so muting
+  // meal cards muted the summary. The summary keeps the old id (and the
+  // user's settings on it); meal cards get their own.
+  group('the meal-card channel', () {
+    test('a user who had muted the old channel finds the new one muted too',
+        () async {
+      final android = _FakeAndroid(existing: [
+        const AndroidNotificationChannel(
+            'calorietracker_reports', 'Reports & meals',
+            importance: Importance.none),
+      ]);
+      final notifier =
+          ReportNotifier(plugin: _RecordingPlugin(android: android));
+      await notifier.init();
+      expect(android.live[ReportNotifier.mealChannelId]!.importance,
+          Importance.none);
+      expect(android.live['calorietracker_reports']!.importance,
+          Importance.none,
+          reason: 'untouched');
+      expect(android.live['calorietracker_reports']!.name, 'Daily summary');
+    });
+
+    test('created only once: later syncs never ask for importance none',
+        () async {
+      final android = _FakeAndroid(existing: [
+        const AndroidNotificationChannel('calorietracker_reports', 'x',
+            importance: Importance.none),
+        const AndroidNotificationChannel(
+            ReportNotifier.mealChannelId, 'Logged meals',
+            importance: Importance.defaultImportance),
+      ]);
+      final notifier =
+          ReportNotifier(plugin: _RecordingPlugin(android: android));
+      await notifier.init();
+      await notifier.showMealCard('t', 'b');
+      final mealCreates = android.channels
+          .where((c) => c.id == ReportNotifier.mealChannelId);
+      expect(mealCreates, isNotEmpty);
+      for (final c in mealCreates) {
+        expect(c.importance, Importance.defaultImportance,
+            reason: 'Android lets an app LOWER an unedited channel');
+      }
+    });
+
+    test('if Android refuses it, meal cards stay on the summary\'s channel',
+        () async {
+      final android = _FakeAndroid(refuse: ReportNotifier.mealChannelId);
+      final plugin = _RecordingPlugin(android: android);
+      final notifier = ReportNotifier(plugin: plugin);
+      await notifier.init();
+      await notifier.showMealCard('🍽️ Meal logged automatically', 'Pasta');
+      expect(
+          plugin.shown.single!.android!.channelId, 'calorietracker_reports');
+      expect(plugin.shown.single!.android!.channelName, 'Daily summary');
+    });
+
+    test('the summary and the OS card stay on the old id, both coloured '
+        'with the accent', () async {
+      final android = _FakeAndroid();
+      final plugin = _RecordingPlugin(android: android);
+      final notifier = ReportNotifier(plugin: plugin);
+      await notifier.showDailySummary('Today: 1,800 kcal', 'On target.');
+      await notifier.showMealCard('🍽️ Meal logged automatically', 'Pasta');
+      await notifier.scheduleDailyAt(
+          when: DateTime(2026, 11, 13, 21, 30), title: 't', body: 'b');
+      expect(plugin.shown.map((d) => d!.android!.channelId),
+          ['calorietracker_reports', ReportNotifier.mealChannelId]);
+      for (final d in plugin.shown) {
+        expect(d!.android!.color, ReportNotifier.cardColor);
+      }
+      expect(plugin.zonedDetails.single!.android!.channelId,
+          'calorietracker_reports');
+      expect(ReportNotifier.cardColor, AppColors.light.accent,
+          reason: 'the app\'s accent, written out for the services layer');
+    });
   });
 
   // The Play push (2026-11-13): init runs at every start, in the app and
@@ -416,16 +535,21 @@ void main() {
     expect(android.permissionRequests, 0);
   });
 
-  test('without channel strings the channel keeps its English name',
+  test('without channel strings the channels keep their English names',
       () async {
     final plugin = _RecordingPlugin();
     final notifier = ReportNotifier(plugin: plugin);
     await notifier.init();
     await notifier.showMealCard('Meal logged', '~450 kcal');
-    final android = plugin.shown.single!.android!;
-    expect(android.channelName, 'Reports & meals');
-    expect(android.channelDescription,
-        'Daily calorie reports and auto-logged meal cards');
+    await notifier.showDailySummary('Today', '1800 kcal');
+    final meal = plugin.shown.first!.android!;
+    expect(meal.channelName, 'Logged meals');
+    expect(meal.channelDescription,
+        'A card for each meal logged automatically from your camera roll');
+    final summary = plugin.shown.last!.android!;
+    expect(summary.channelName, 'Daily summary');
+    expect(summary.channelDescription,
+        'Your calorie summary, at the time you set');
   });
 
   // The Android OS card (Play push, 2026-11-13): the alarm is inexact, and

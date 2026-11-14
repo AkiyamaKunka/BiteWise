@@ -13,6 +13,7 @@
 library;
 
 import 'dart:async';
+import 'dart:ui' show Color;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -38,6 +39,7 @@ class ReportNotifier {
     Future<List<int>> Function()? pendingIds,
     Future<String?> Function(DateTime slotDate)? dailyBody,
     ({String name, String description}) Function()? channelStrings,
+    ({String name, String description}) Function()? mealChannelStrings,
     int? mealCardIdSeed,
     Future<String?> Function()? pendingDailyPayload,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
@@ -57,6 +59,8 @@ class ReportNotifier {
         // ignore: prefer_initializing_formals
         _channelStrings = channelStrings,
         // ignore: prefer_initializing_formals
+        _mealChannelStrings = mealChannelStrings,
+        // ignore: prefer_initializing_formals
         _pendingDailyPayload = pendingDailyPayload {
     // Each background run constructs a FRESH notifier; a fixed 100-base
     // would make every run overwrite the previous run's unread meal cards.
@@ -68,7 +72,20 @@ class ReportNotifier {
   /// stacking (one canonical daily report, spec §5.5).
   static const int dailyReportNotificationId = 9001;
 
-  static const String _channelId = 'calorietracker_reports';
+  /// The daily summary's Android channel. The id every install has had
+  /// since July 2026 ('Reports & meals', which also carried the meal
+  /// cards), kept so the user's settings on it — muted, silent, a sound —
+  /// survive; only its name changed, to 'Daily summary' (Play push).
+  static const String summaryChannelId = 'calorietracker_reports';
+
+  /// Meal cards and the automatic-scan notices, on their own channel since
+  /// the Play push: muting them used to mute the summary too.
+  static const String mealChannelId = 'chopstats_meal_cards';
+
+  /// The cards' colour on Android (the small icon and app name in the
+  /// shade): the app's terracotta accent, AppColors.light.accent
+  /// (notifications_test pins the two together).
+  static const Color cardColor = Color(0xFFA64B2A);
 
   /// Android notification small icon (res/drawable/ic_stat_bitewise.xml).
   /// Android draws a small icon from its alpha channel only, so the
@@ -93,23 +110,40 @@ class ReportNotifier {
   /// still holds, null when it holds none.
   final Future<String?> Function()? _pendingDailyPayload;
 
-  /// Android channel name/description in the app language, read at post
-  /// time so a language switch shows on the very next card. Injected by
-  /// the ui/ callers (localizationsFor) so services/ stays free of ui/;
-  /// null keeps the English pair for tests and createSettingsStore's bare
-  /// fallback notifier.
+  /// Android channel names/descriptions in the app language — the
+  /// summary's and the meal cards' — read at post time so a language
+  /// switch shows on the very next card. Injected by the ui/ callers
+  /// (localizationsFor) so services/ stays free of ui/; null keeps the
+  /// English pair for tests and createSettingsStore's bare fallback
+  /// notifier.
   final ({String name, String description}) Function()? _channelStrings;
+  final ({String name, String description}) Function()? _mealChannelStrings;
 
   static const ({String name, String description}) _englishChannel = (
-    name: 'Reports & meals',
-    description: 'Daily calorie reports and auto-logged meal cards',
+    name: 'Daily summary',
+    description: 'Your calorie summary, at the time you set',
+  );
+
+  static const ({String name, String description}) _englishMealChannel = (
+    name: 'Logged meals',
+    description: 'A card for each meal logged automatically from your '
+        'camera roll',
   );
 
   static const Importance _importance = Importance.defaultImportance;
 
-  /// The channel name/description in the app language right now.
+  /// The summary channel's name/description in the app language right now.
   ({String name, String description}) _channel() =>
       _channelStrings?.call() ?? _englishChannel;
+
+  ({String name, String description}) _mealChannel() =>
+      _mealChannelStrings?.call() ?? _englishMealChannel;
+
+  /// Set when Android would not create the meal-card channel (or could not
+  /// say whether the summary's is blocked): meal cards then go on the
+  /// summary's channel, as they did before the split, so a user's mute
+  /// still holds.
+  bool _mealsOnSummaryChannel = false;
 
   /// Built per post, not const. Android shows the channel name under
   /// 设置 › 应用 › 筷拍 › 通知 and in every card's long-press menu, and it was
@@ -119,14 +153,19 @@ class ReportNotifier {
   /// a MISSING channel never, so on a fresh install Android dropped every
   /// card ("No Channel found", API 35 emulator 2026-10-12). Naming and
   /// renaming is [_syncChannel]'s job, not the post's.
-  NotificationDetails _details() {
-    final channel = _channel();
+  ///
+  /// [meal]: a meal card (or an automatic-scan notice), on the meal-card
+  /// channel; else the daily summary's.
+  NotificationDetails _details({bool meal = false}) {
+    final onMeals = meal && !_mealsOnSummaryChannel;
+    final channel = onMeals ? _mealChannel() : _channel();
     return NotificationDetails(
       android: AndroidNotificationDetails(
-        _channelId,
+        onMeals ? mealChannelId : summaryChannelId,
         channel.name,
         channelDescription: channel.description,
         icon: androidSmallIcon,
+        color: cardColor,
         importance: _importance,
         priority: Priority.defaultPriority,
         channelAction: AndroidNotificationChannelAction.createIfNotExists,
@@ -136,28 +175,58 @@ class ReportNotifier {
     );
   }
 
-  /// Create the Android channel, or rename an existing one to the app
+  /// Create the Android channels, or rename existing ones to the app
   /// language. Run from init() — which the foreground app and every
   /// headless run both call before posting — and again before each post so
   /// a 语言 switch shows on the very next card. For an existing channel
-  /// Android only takes the name/description (same importance), so the
-  /// user's own per-channel settings survive. Never throws: a no-op off
-  /// Android.
+  /// Android only takes the name/description (an app cannot raise its
+  /// importance), so the user's own per-channel settings survive. Never
+  /// throws: a no-op off Android.
+  ///
+  /// The meal-card channel is new with the Play push. A user who had muted
+  /// the old shared channel muted the meal cards with it, so when the
+  /// summary's channel is blocked (importance none) the meal channel is
+  /// CREATED blocked too — Android accepts IMPORTANCE_NONE at creation
+  /// (its range check is NONE..MAX). Should it refuse, or should the
+  /// channel list be unreadable, meal cards stay on the summary's channel.
   Future<void> _syncChannel() async {
-    final channel = _channel();
+    final AndroidFlutterLocalNotificationsPlugin? android;
     try {
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(AndroidNotificationChannel(
-            _channelId,
-            channel.name,
-            description: channel.description,
-            importance: _importance,
-          ));
+      android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
     } catch (_) {
-      // No platform plugin (tests); the post's createIfNotExists still
-      // creates a missing channel.
+      return;
+    }
+    if (android == null) return; // not Android (or tests)
+    final summary = _channel();
+    try {
+      await android.createNotificationChannel(AndroidNotificationChannel(
+        summaryChannelId,
+        summary.name,
+        description: summary.description,
+        importance: _importance,
+      ));
+    } catch (_) {
+      // The post's createIfNotExists still creates a missing channel.
+    }
+    try {
+      final existing =
+          await android.getNotificationChannels() ?? const <AndroidNotificationChannel>[];
+      final mealExists = existing.any((c) => c.id == mealChannelId);
+      final summaryBlocked = existing.any((c) =>
+          c.id == summaryChannelId && c.importance == Importance.none);
+      final meal = _mealChannel();
+      await android.createNotificationChannel(AndroidNotificationChannel(
+        mealChannelId,
+        meal.name,
+        description: meal.description,
+        // Only at creation: an existing channel keeps whatever it has.
+        importance:
+            !mealExists && summaryBlocked ? Importance.none : _importance,
+      ));
+      _mealsOnSummaryChannel = false;
+    } catch (_) {
+      _mealsOnSummaryChannel = true;
     }
   }
 
@@ -442,10 +511,11 @@ class ReportNotifier {
   }
 
   /// Meal card for watcher-logged meals (spec §6 auto intake surfaces its
-  /// §5.4 result card as a notification). Ids increment so multiple
-  /// auto-logged meals stack instead of overwriting each other.
+  /// §5.4 result card as a notification), on the meal-card channel. Ids
+  /// increment so multiple auto-logged meals stack instead of overwriting
+  /// each other.
   Future<void> showMealCard(String title, String body) =>
-      _present(_nextMealCardId++, title, body);
+      _present(_nextMealCardId++, title, body, meal: true);
 
   /// The daily coach summary. Shares the daily-report id so a re-post
   /// REPLACES rather than stacks — one summary per day, by construction
@@ -453,11 +523,15 @@ class ReportNotifier {
   Future<void> showDailySummary(String title, String body) =>
       _present(dailyReportNotificationId, title, body);
 
-  Future<void> _present(int id, String title, String body) async {
+  Future<void> _present(int id, String title, String body,
+      {bool meal = false}) async {
     final presenter = _presenter;
     if (presenter != null) return presenter(id, title, body);
     await _syncChannel();
     await _plugin.show(
-        id: id, title: title, body: body, notificationDetails: _details());
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: _details(meal: meal));
   }
 }

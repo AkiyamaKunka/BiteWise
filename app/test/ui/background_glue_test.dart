@@ -1996,10 +1996,10 @@ void main() {
     });
 
     for (final (lang, title, body) in const [
-      // The card's summary is in the app language too (zh 千卡).
-      ('zh', '🍽️ 已扣除剩菜', '已扣除剩菜：Noodles —— 减 300 千卡，现约 300 千卡'),
-      ('en', '🍽️ Leftovers deducted',
-          'Leftovers deducted: Noodles — −300 kcal, now ~300 kcal'),
+      // The card's summary is in the app language too (zh 千卡), and does
+      // not repeat the title (Play push, UX screenshot 06).
+      ('zh', '🍽️ 已扣除剩菜', 'Noodles —— 减 300 千卡，现约 300 千卡'),
+      ('en', '🍽️ Leftovers deducted', 'Noodles — −300 kcal, now ~300 kcal'),
     ]) {
       test('[$lang] a leftover deduction posts ONE card; not-food and '
           'failures still post none', () async {
@@ -2033,6 +2033,51 @@ void main() {
         expect(cards, [(title, body)]);
       });
     }
+  });
+
+  // The Play push (UX screenshot 06): 'Meal logged: Pasta — ~650 kcal'
+  // under the title 'Meal logged automatically' said it twice.
+  group('the meal card\'s body (mealCardBody)', () {
+    for (final lang in const ['en', 'zh']) {
+      final l = localizationsFor(lang);
+      test('[$lang] a saved meal: its name and calories, nothing repeated',
+          () {
+        const o = PhotoOutcome(
+            PhotoOutcomeKind.saved, 'Meal logged: Pasta — ~650 kcal',
+            analysis: {'is_food': true, 'meal_description': 'Pasta'},
+            detail: 'Pasta — ~650 kcal',
+            mealName: 'Pasta',
+            kcal: '650');
+        final body = mealCardBody(l, o);
+        expect(body, l.outcomeSavedSummary('Pasta', '650'));
+        expect(body, isNot(contains(l.outcomeSavedMsg('').trim())));
+        expect(l.mealCardAutoTitle, isNot(contains(body)));
+      });
+
+      test('[$lang] a meal with no description is named like everywhere '
+          'else', () {
+        const o = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: Meal',
+            analysis: {'is_food': true},
+            mealName: 'Meal',
+            kcal: '400');
+        expect(mealCardBody(l, o), l.outcomeSavedSummary(l.nlUnnamedMeal, '400'));
+      });
+    }
+
+    test('without a name or calories: the summary, then the snackbar line',
+        () {
+      final l = localizationsFor('en');
+      expect(
+          mealCardBody(
+              l,
+              const PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: x',
+                  detail: 'Soup')),
+          'Soup');
+      expect(
+          mealCardBody(
+              l, const PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: x')),
+          isNotEmpty);
+    });
   });
 
   // 2026-10-19 (review): the budget admits a photo until 15 s after the

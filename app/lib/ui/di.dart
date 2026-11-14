@@ -169,6 +169,8 @@ class AppServices {
       // Read per post: the channel name Android shows in its Settings
       // follows a language switch without a restart.
       channelStrings: () => notificationChannelFor(settings.appLanguage),
+      mealChannelStrings: () =>
+          mealNotificationChannelFor(settings.appLanguage),
       dailyBody: (slotDate) async {
         await postSummary();
         // NULL, not '': postSummary has ALREADY presented the coach summary

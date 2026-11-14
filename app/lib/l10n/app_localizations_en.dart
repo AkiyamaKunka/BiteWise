@@ -1759,11 +1759,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mealCardLeftoverTitle => '🍽️ Leftovers deducted';
 
   @override
-  String get notificationChannelName => 'Reports & meals';
+  String get notificationChannelName => 'Daily summary';
 
   @override
   String get notificationChannelDescription =>
-      'Daily calorie reports and auto-logged meal cards';
+      'Your calorie summary, at the time you set';
 
   @override
   String dayLoadFailed(String error) {
@@ -3626,4 +3626,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationsAllowAction => 'Allow notifications';
+
+  @override
+  String get notificationMealChannelName => 'Logged meals';
+
+  @override
+  String get notificationMealChannelDescription =>
+      'A card for each meal logged automatically from your camera roll';
 }

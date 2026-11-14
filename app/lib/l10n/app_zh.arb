@@ -481,8 +481,8 @@
   "errServerBusy": "你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。",
   "mealCardAutoTitle": "🍽️ 已自动记录一餐",
   "mealCardLeftoverTitle": "🍽️ 已扣除剩菜",
-  "notificationChannelName": "总结与餐食",
-  "notificationChannelDescription": "每日热量总结和自动记录的餐食卡片",
+  "notificationChannelName": "每日总结",
+  "notificationChannelDescription": "在你设定的时间发送当天的热量总结",
   "todayLoadFailed": "无法加载今天的记录。",
   "historyLoadFailed": "无法加载历史记录。",
   "dayLoadFailed": "无法加载这一天：{error}",
@@ -1009,5 +1009,7 @@
   "covWindowLabel": "检查天数",
   "bodyDeleteFailed": "没能删除，请再试一次。",
   "summaryBatteryRestrictedHint": "电池使用受限 —— 每日总结无法送达。",
-  "notificationsAllowAction": "允许通知"
+  "notificationsAllowAction": "允许通知",
+  "notificationMealChannelName": "自动记录的餐食",
+  "notificationMealChannelDescription": "从相册自动记录每一餐时发送的卡片"
 }

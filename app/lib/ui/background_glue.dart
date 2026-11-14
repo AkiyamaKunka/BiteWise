@@ -39,7 +39,9 @@ import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
+import '../l10n/app_localizations.dart';
 import 'coach_strings.dart';
+import 'format.dart' show mealDescription;
 import '../services/settings/app_settings.dart';
 import 'photo_pipeline.dart';
 import 'os_summary.dart';
@@ -550,7 +552,7 @@ Future<bool> headlessBackfillWith({
             o.kind == PhotoOutcomeKind.saved
                 ? l.mealCardAutoTitle
                 : l.mealCardLeftoverTitle,
-            outcomeBody(l, o));
+            mealCardBody(l, o));
       }
       // The intake's safeFrontier is the ONLY persistable value: it is
       // createDate-based (the watermark's timebase), halts at transient
@@ -600,6 +602,37 @@ Future<bool> headlessBackfillWith({
             readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
   }
   return true;
+}
+
+/// The body of a background meal card: the meal itself ('Pasta — ~650
+/// kcal'), under a title that already says what happened. It used to be
+/// outcomeBody's snackbar line, which repeats it: 'Meal logged: …' under
+/// 'Meal logged automatically' (Play push, UX screenshot 06). A meal with
+/// no description is named like everywhere else (nlUnnamedMeal); without
+/// a name or calories, the pipeline's summary, then the snackbar line.
+@visibleForTesting
+String mealCardBody(AppLocalizations l, PhotoOutcome o) {
+  final analysis = o.analysis;
+  final raw = o.mealName;
+  final name = raw == null
+      ? null
+      : analysis != null && mealDescription(analysis, fallback: '').isEmpty
+          ? l.nlUnnamedMeal
+          : raw;
+  final kcal = o.kcal;
+  switch (o.kind) {
+    case PhotoOutcomeKind.saved:
+      if (name != null && kcal != null) {
+        return l.outcomeSavedSummary(name, kcal);
+      }
+    case PhotoOutcomeKind.leftoverApplied:
+      final cut = o.deductedKcal;
+      if (name != null && kcal != null && cut != null) {
+        return l.outcomeLeftoverSummary(name, '$cut', kcal);
+      }
+    default:
+  }
+  return o.detail ?? outcomeBody(l, o);
 }
 
 /// How a scan that ran to the end of [headlessBackfillWith] stopped, for
@@ -776,6 +809,8 @@ Future<bool> _runAfterLaunch({
   // REPLACE an unread daily report).
   final notifier = ReportNotifier(
       channelStrings: () => notificationChannelFor(settings.appLanguage),
+      mealChannelStrings: () =>
+          mealNotificationChannelFor(settings.appLanguage),
       mealCardIdSeed: 10000 +
           (DateTime.now().millisecondsSinceEpoch ~/ 10000) % 8640000);
   final bool ok;

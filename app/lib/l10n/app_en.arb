@@ -1293,13 +1293,13 @@
   "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
   "mealCardAutoTitle": "🍽️ Meal logged automatically",
   "mealCardLeftoverTitle": "🍽️ Leftovers deducted",
-  "notificationChannelName": "Reports & meals",
+  "notificationChannelName": "Daily summary",
   "@notificationChannelName": {
-    "description": "Android notification channel name: shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
+    "description": "The daily summary's Android notification channel (its id is the one every install has had, so the user's settings on it survive; until the Play push it was 'Reports & meals' and also carried the meal cards). Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
   },
-  "notificationChannelDescription": "Daily calorie reports and auto-logged meal cards",
+  "notificationChannelDescription": "Your calorie summary, at the time you set",
   "@notificationChannelDescription": {
-    "description": "Android notification channel description, shown under the channel name in the system notification settings."
+    "description": "The daily summary channel's description, shown under its name in the system notification settings."
   },
   "dayLoadFailed": "Could not load this day: {error}",
   "@dayLoadFailed": {
@@ -3446,5 +3446,13 @@
   "notificationsAllowAction": "Allow notifications",
   "@notificationsAllowAction": {
     "description": "Settings › Daily summary, Android 13+: the button under notificationsOffHint while the app has never asked for the notification permission. Tapping it shows Android's own permission dialog (asked once); after that the button reads openSystemSettings and opens the app's notification settings."
+  },
+  "notificationMealChannelName": "Logged meals",
+  "@notificationMealChannelName": {
+    "description": "Android notification channel for the cards posted when a meal is logged automatically from the camera roll (and when automatic logging pauses), separate from the daily summary's channel since the Play push. Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu; re-sent in the app language on every post."
+  },
+  "notificationMealChannelDescription": "A card for each meal logged automatically from your camera roll",
+  "@notificationMealChannelDescription": {
+    "description": "The meal-card channel's description, shown under its name in the system notification settings."
   }
 }

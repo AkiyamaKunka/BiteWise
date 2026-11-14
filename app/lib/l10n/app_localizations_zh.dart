@@ -1634,10 +1634,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mealCardLeftoverTitle => '🍽️ 已扣除剩菜';
 
   @override
-  String get notificationChannelName => '总结与餐食';
+  String get notificationChannelName => '每日总结';
 
   @override
-  String get notificationChannelDescription => '每日热量总结和自动记录的餐食卡片';
+  String get notificationChannelDescription => '在你设定的时间发送当天的热量总结';
 
   @override
   String dayLoadFailed(String error) {
@@ -3259,4 +3259,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationsAllowAction => '允许通知';
+
+  @override
+  String get notificationMealChannelName => '自动记录的餐食';
+
+  @override
+  String get notificationMealChannelDescription => '从相册自动记录每一餐时发送的卡片';
 }
