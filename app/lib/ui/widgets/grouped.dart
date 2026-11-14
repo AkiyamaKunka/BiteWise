@@ -640,18 +640,85 @@ Future<T?> showGroupedSheet<T>(
       ),
     );
 
+/// A sheet's drag handle that closes the sheet through
+/// Navigator.maybePop, so a PopScope inside it (DiscardChangesGuard) asks
+/// first. Material's own handle and drag-to-dismiss pop the sheet with
+/// Navigator.pop, past any PopScope: 72.5 typed in the Body log sheet, a
+/// fling down, and it was gone (review 2026-11-13). For a sheet opened with
+/// `enableDrag: false, showDragHandle: false`: it looks like the theme's
+/// handle (the same 48-pt strip), a drag down past [_closeDistance] or a
+/// downward fling closes, and a screen reader's Dismiss does the same. The
+/// sheet itself does not follow the finger.
+class SheetDragHandle extends StatefulWidget {
+  const SheetDragHandle({super.key});
+
+  @override
+  State<SheetDragHandle> createState() => _SheetDragHandleState();
+}
+
+class _SheetDragHandleState extends State<SheetDragHandle> {
+  static const double _closeDistance = 24;
+  static const double _closeVelocity = 700; // Material's sheet fling
+  double _dragged = 0;
+
+  void _close() => Navigator.maybePop(context);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final size = theme.bottomSheetTheme.dragHandleSize ?? const Size(32, 4);
+    final color = theme.bottomSheetTheme.dragHandleColor ??
+        theme.colorScheme.onSurfaceVariant;
+    return Semantics(
+      key: const Key('sheetDragHandle'),
+      label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      container: true,
+      onTap: _close,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onVerticalDragStart: (_) => _dragged = 0,
+        onVerticalDragUpdate: (d) => _dragged += d.delta.dy,
+        onVerticalDragEnd: (d) {
+          if (_dragged > _closeDistance ||
+              (d.primaryVelocity ?? 0) > _closeVelocity) {
+            _close();
+          }
+        },
+        child: SizedBox(
+          height: kMinInteractiveDimension,
+          child: Center(
+            child: Container(
+              width: size.width,
+              height: size.height,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(size.height / 2),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The body of a grouped sheet (see [showGroupedSheet]). [children] see
 /// the in-sheet colours ([AppColors.inSheet]), so GroupedSection and
-/// GroupedCard draw sheet cells inside it.
+/// GroupedCard draw sheet cells inside it. [dragHandle] draws a
+/// [SheetDragHandle] above the scrolling content, for a sheet opened
+/// without Material's own handle.
 class GroupedSheet extends StatelessWidget {
   const GroupedSheet({
     super.key,
     this.title,
     this.subtitle,
+    this.dragHandle = false,
     required this.children,
   });
   final String? title;
   final String? subtitle;
+  final bool dragHandle;
   final List<Widget> children;
 
   @override
@@ -660,48 +727,58 @@ class GroupedSheet extends StatelessWidget {
     final colors = AppColors.of(context);
     final type = AppTypography.of(context);
     final inSheet = colors.inSheet();
+    final scroll = SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Semantics(
+                header: true,
+                child: Text(title!,
+                    style: type.title2.copyWith(color: colors.label)),
+              ),
+            ),
+          if (subtitle != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(subtitle!,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: colors.secondaryLabel)),
+            ),
+          Theme(
+            data: theme.copyWith(extensions: [
+              ...theme.extensions.values
+                  .where((e) => e is! AppColors),
+              inSheet,
+            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
     return Padding(
       // The keyboard: the sheet's content rises above it.
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (title != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Semantics(
-                    header: true,
-                    child: Text(title!,
-                        style: type.title2.copyWith(color: colors.label)),
-                  ),
-                ),
-              if (subtitle != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                  child: Text(subtitle!,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: colors.secondaryLabel)),
-                ),
-              Theme(
-                data: theme.copyWith(extensions: [
-                  ...theme.extensions.values
-                      .where((e) => e is! AppColors),
-                  inSheet,
-                ]),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
+        child: dragHandle
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SheetDragHandle(),
+                  Flexible(child: scroll),
+                ],
+              )
+            : scroll,
       ),
     );
   }

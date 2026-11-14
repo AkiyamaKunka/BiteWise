@@ -161,6 +161,11 @@ class BodyScreenState extends State<BodyScreen> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      // Material's drag-to-dismiss and handle pop the sheet past its
+      // PopScope, dropping typed values unasked; the sheet draws its own
+      // handle, which closes through maybePop (GroupedSheet dragHandle).
+      enableDrag: false,
+      showDragHandle: false,
       builder: (_) => _BodySheetHost(
         dao: widget.dao,
         initialDate: date ?? isoDate(now),
@@ -497,6 +502,7 @@ class _BodySheetHostState extends State<_BodySheetHost> {
     final shown = AppFormats.shortDate(context, day, now: widget.now);
     final hasData = _hasData;
     return GroupedSheet(
+      dragHandle: true,
       // 'Edit' only when the day already has data — the Log button on a
       // day that was logged earlier edits it too, and a day without data
       // is a new log whichever way it was opened.

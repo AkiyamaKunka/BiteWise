@@ -12,7 +12,9 @@ import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/fix_meal_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/settings/profile_page.dart';
+import 'package:calorie_tracker/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -306,12 +308,15 @@ void main() {
   group('Body log sheet', () {
     final clock = DateTime(2026, 8, 2, 10);
 
-    Future<FakeDao> openSheet(WidgetTester tester) async {
+    Future<T> openSheet<T extends FakeDao>(WidgetTester tester,
+        {T? dao}) async {
       tester.view.physicalSize = const Size(800, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
-      final dao = FakeDao();
+      dao ??= FakeDao() as T;
+      // The app's theme: its sheets show a drag handle.
       await tester.pumpWidget(MaterialApp(
+          theme: AppTheme.build(Brightness.light, cjk: false),
           home: BodyScreen(dao: dao, clock: () => clock)));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('logBodyButton')));
@@ -350,6 +355,75 @@ void main() {
       await tester.tap(find.byKey(_keep));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('bodySheetSave')), findsOneWidget);
+    });
+
+    // Review 2026-11-13 (HIGH): Material's handle and drag-to-dismiss pop
+    // the sheet with Navigator.pop, past the question: 72.5 typed, a fling
+    // down, and the sheet was gone with nothing saved.
+    Future<void> flingHandle(WidgetTester tester) async {
+      final handle = tester.getRect(find.byKey(const Key('sheetDragHandle')));
+      await tester.flingFrom(handle.center, const Offset(0, 600), 3000);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a fling down on the handle asks too', (tester) async {
+      final dao = await openSheet(tester);
+      await tester.enterText(find.byKey(const Key('bodyWeightField')), '72.5');
+      await tester.pump();
+      await flingHandle(tester);
+      expect(find.byKey(_dialog), findsOneWidget);
+      await tester.tap(find.byKey(_keep));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('bodySheetSave')), findsOneWidget);
+      expect(find.text('72.5'), findsOneWidget);
+
+      await flingHandle(tester);
+      await tester.tap(find.byKey(_discard));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('bodySheetSave')), findsNothing);
+      expect(dao.weightsByDate, isEmpty);
+    });
+
+    testWidgets('a clean sheet: a fling down on the handle closes it',
+        (tester) async {
+      await openSheet(tester);
+      await flingHandle(tester);
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.byKey(const Key('bodySheetSave')), findsNothing);
+    });
+
+    testWidgets('a short nudge on the handle does nothing', (tester) async {
+      await openSheet(tester);
+      final handle = tester.getRect(find.byKey(const Key('sheetDragHandle')));
+      await tester.dragFrom(handle.center, const Offset(0, 8));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('bodySheetSave')), findsOneWidget);
+    });
+
+    testWidgets("the handle's screen-reader Dismiss asks too", (tester) async {
+      final handle = tester.ensureSemantics();
+      await openSheet(tester);
+      final dismiss = find.semantics.byPredicate((n) =>
+          n.label == 'Dismiss' &&
+          n.getSemanticsData().hasAction(SemanticsAction.tap));
+      expect(dismiss, findsOne);
+      await tester.enterText(find.byKey(const Key('bodyHipField')), '95');
+      await tester.pump();
+      tester.semantics.tap(dismiss);
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialog), findsOneWidget);
+      await tester.tap(find.byKey(_discard));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('bodySheetSave')), findsNothing);
+
+      // Clean: it just closes.
+      await tester.tap(find.byKey(const Key('logBodyButton')));
+      await tester.pumpAndSettle();
+      tester.semantics.tap(dismiss);
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.byKey(const Key('bodySheetSave')), findsNothing);
+      handle.dispose();
     });
 
     testWidgets('an untouched sheet closes at once', (tester) async {
