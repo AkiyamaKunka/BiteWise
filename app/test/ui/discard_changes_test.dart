@@ -8,6 +8,7 @@
 import 'dart:async';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/ui/screens/add_flow.dart' show AddTextScreen;
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/fix_meal_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
@@ -376,6 +377,67 @@ void main() {
       await _systemBack(tester);
       expect(find.byKey(_dialog), findsNothing);
       expect(find.byType(FixMealScreen), findsNothing);
+    });
+  });
+
+  group('Describe a meal', () {
+    Widget describe(FakeExecutor executor) => AddTextScreen(
+        executor: executor, dao: FakeDao(), settings: FakeSettings());
+
+    testWidgets('typed text asks; an empty field leaves at once',
+        (tester) async {
+      final executor = FakeExecutor();
+      await _push(tester, describe(executor));
+      await _systemBack(tester);
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.byType(AddTextScreen), findsNothing);
+
+      await tester.tap(find.byKey(_open));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const Key('addTextField')), 'two eggs and toast');
+      await tester.pump();
+      await _systemBack(tester);
+      expect(find.byKey(_dialog), findsOneWidget);
+      await tester.tap(find.byKey(_keep));
+      await tester.pumpAndSettle();
+      expect(find.text('two eggs and toast'), findsOneWidget);
+      await _systemBack(tester);
+      await tester.tap(find.byKey(_discard));
+      await tester.pumpAndSettle();
+      expect(find.byType(AddTextScreen), findsNothing);
+      expect(executor.describedTexts, isEmpty);
+    });
+
+    testWidgets('back from the preview editor keeps the text, and back again '
+        'asks', (tester) async {
+      final executor = FakeExecutor();
+      await _push(tester, describe(executor));
+      await tester.enterText(
+          find.byKey(const Key('addTextField')), 'two eggs and toast');
+      await tester.tap(find.byKey(const Key('addTextSend')));
+      await tester.pumpAndSettle();
+      expect(find.byType(MealEditorScreen), findsOneWidget);
+      await _systemBack(tester); // the untouched preview leaves at once
+      expect(find.byType(MealEditorScreen), findsNothing);
+      expect(find.text('two eggs and toast'), findsOneWidget);
+      await _systemBack(tester);
+      expect(find.byKey(_dialog), findsOneWidget);
+    });
+
+    testWidgets('a preview saved closes Describe too, no question',
+        (tester) async {
+      final executor = FakeExecutor();
+      await _push(tester, describe(executor));
+      await tester.enterText(
+          find.byKey(const Key('addTextField')), 'two eggs and toast');
+      await tester.tap(find.byKey(const Key('addTextSend')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.byType(AddTextScreen), findsNothing);
+      expect(find.byKey(_open), findsOneWidget);
     });
   });
 
