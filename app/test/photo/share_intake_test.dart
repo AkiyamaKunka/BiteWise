@@ -646,4 +646,135 @@ void main() {
       await pipeline.dispose();
     });
   });
+
+  // Review 2026-11-13: with the C2 backpressure, copies wait in the share
+  // folder for minutes. An app killed mid-batch left the rest there for
+  // good — full-size originals in the cache, never logged, nothing said
+  // (MainActivity removes only EMPTY folders, and a recreated activity
+  // does not hand the launch share over again). The next start logs the
+  // ones shared within a day, through the same consent gate and pipeline:
+  // a copy still on disk was never read, since reading deletes it, so
+  // nothing is sent twice. Older ones are deleted unread.
+  group('Android: copies a killed app left unread', () {
+    late Directory cache;
+    late String folder;
+
+    setUp(() {
+      cache = Directory.systemTemp.createTempSync('share_stranded_');
+      folder = '${cache.path}/$androidShareFolderName';
+      Directory(folder).createSync(recursive: true);
+    });
+    tearDown(() => cache.deleteSync(recursive: true));
+
+    File copyAt(String id, String name, Duration age) =>
+        File('$folder/$id/$name')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(name.codeUnits)
+          ..setLastModifiedSync(now.subtract(age));
+
+    ShareIntake android(FakeShareSource source, List<String> read) =>
+        ShareIntake(
+            source: source,
+            library: FakePhotoLibrary(),
+            readBytes: (path) async {
+              read.add(path);
+              try {
+                return await File(path).readAsBytes();
+              } catch (_) {
+                return null;
+              }
+            },
+            // The production cleanup: a real delete.
+            sharedFolder: () async => folder,
+            clock: () => now);
+
+    test('are logged at the next start, oldest first, after the launch '
+        'share', () async {
+      final a = copyAt('u1', 'IMG_a.jpg', const Duration(hours: 2));
+      final b = copyAt('u2', 'IMG_b.jpg', const Duration(hours: 1));
+      final launch = copyAt('u3', 'IMG_c.jpg', Duration.zero);
+      final source = FakeShareSource()..initial = [launch.path];
+      final read = <String>[];
+      final emitted = <String>[];
+      final sub = android(source, read)
+          .photos()
+          .listen((p) => emitted.add(p.fileName));
+      await pumpEventQueue(times: 50);
+      expect(emitted, ['IMG_c.jpg', 'IMG_a.jpg', 'IMG_b.jpg']);
+      expect(emitted.length, 3, reason: 'the launch share once, not twice');
+      for (final f in [a, b, launch]) {
+        expect(f.existsSync(), isFalse, reason: f.path);
+      }
+      await sub.cancel();
+    });
+
+    test('older than a day: deleted unread', () async {
+      final old = copyAt('u1', 'IMG_old.jpg', const Duration(hours: 25));
+      final read = <String>[];
+      final emitted = <IntakePhoto>[];
+      final sub = android(FakeShareSource(), read).photos().listen(emitted.add);
+      await pumpEventQueue(times: 50);
+      expect(emitted, isEmpty);
+      expect(read, isEmpty, reason: 'never read, never sent');
+      expect(old.existsSync(), isFalse);
+      await sub.cancel();
+    });
+
+    test('a copy written seconds ago is left to its own share', () async {
+      final fresh = copyAt('u1', 'IMG_new.jpg', const Duration(seconds: 2));
+      final read = <String>[];
+      final sub = android(FakeShareSource(), read).photos().listen((_) {});
+      await pumpEventQueue(times: 50);
+      expect(read, isEmpty,
+          reason: 'it may still be being copied; its event delivers it');
+      expect(fresh.existsSync(), isTrue);
+      await sub.cancel();
+    });
+
+    test('a copy both left over and in a live share is logged once',
+        () async {
+      final c = copyAt('u1', 'IMG_x.jpg', const Duration(minutes: 5));
+      final source = FakeShareSource();
+      final read = <String>[];
+      final emitted = <String>[];
+      final sub = android(source, read)
+          .photos()
+          .listen((p) => emitted.add(p.fileName));
+      source.controller.add([c.path]);
+      await pumpEventQueue(times: 50);
+      expect(emitted, ['IMG_x.jpg']);
+      await sub.cancel();
+    });
+
+    test('only files inside the share folder are touched', () async {
+      final private = File('${cache.path}/private.jpg')
+        ..writeAsBytesSync([1])
+        ..setLastModifiedSync(now.subtract(const Duration(days: 3)));
+      final read = <String>[];
+      final sub = android(FakeShareSource(), read).photos().listen((_) {});
+      await pumpEventQueue(times: 50);
+      expect(read, isEmpty);
+      expect(private.existsSync(), isTrue);
+      await sub.cancel();
+    });
+
+    test('iOS (no share folder) sweeps nothing', () async {
+      final left = copyAt('u1', 'IMG_a.jpg', const Duration(hours: 1));
+      final read = <String>[];
+      final sub = ShareIntake(
+              source: FakeShareSource(),
+              library: FakePhotoLibrary(),
+              readBytes: (p) async {
+                read.add(p);
+                return null;
+              },
+              clock: () => now)
+          .photos()
+          .listen((_) {});
+      await pumpEventQueue(times: 50);
+      expect(read, isEmpty);
+      expect(left.existsSync(), isTrue);
+      await sub.cancel();
+    });
+  });
 }

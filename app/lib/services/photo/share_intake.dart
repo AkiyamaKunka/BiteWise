@@ -116,6 +116,21 @@ bool isWithinFolder(String path, String folder) {
   return true;
 }
 
+/// [path] with '.' and '..' resolved, for comparing two spellings of one
+/// file.
+String _normalized(String path) {
+  final out = <String>[];
+  for (final s in path.split('/')) {
+    if (s.isEmpty || s == '.') continue;
+    if (s == '..') {
+      if (out.isNotEmpty) out.removeLast();
+    } else {
+      out.add(s);
+    }
+  }
+  return '/${out.join('/')}';
+}
+
 typedef FileBytesReader = Future<Uint8List?> Function(String path);
 typedef SharedFileCleanup = Future<void> Function(String path);
 
@@ -247,6 +262,10 @@ class ShareIntake {
         liveSub = _source.imagePathBatches().listen(enqueue,
             onError: controller.addError,
             onDone: () => reading = reading.then((_) => controller.close()));
+        if (_copiesWait) {
+          final left = await _leftOver(initial);
+          if (!cancelled && left.isNotEmpty) enqueue(left);
+        }
       },
       onResume: wake,
       onCancel: () async {
@@ -256,6 +275,62 @@ class ShareIntake {
       },
     );
     return controller.stream;
+  }
+
+  /// How long a copy a killed app left unread is still logged at the next
+  /// start (Android); older ones are deleted unread.
+  static const strandedMaxAge = Duration(hours: 24);
+
+  /// A copy younger than this may still be being written for a share
+  /// whose own event delivers it: the start-up sweep leaves it alone.
+  static const strandedMinAge = Duration(seconds: 10);
+
+  /// The share folder's copies an earlier run never read (Android, review
+  /// 2026-11-13): with the C2 backpressure they wait there for minutes,
+  /// and an app killed mid-batch left them for good — full-size originals
+  /// in the cache, never logged, nothing said (MainActivity removes only
+  /// empty folders, and a recreated activity hands no share over again).
+  /// Those shared within [strandedMaxAge] come back, oldest first, to go
+  /// through the same consent gate and pipeline as any share: the user
+  /// shared them to be logged, and a copy still on disk was never read
+  /// (reading deletes it), so nothing is sent twice. Older ones are
+  /// deleted here, unread: logged days late they would surprise, and
+  /// could land on the wrong day. The launch share's own copies, and any
+  /// younger than [strandedMinAge], are left out.
+  Future<List<String>> _leftOver(List<String> launch) async {
+    final String root;
+    try {
+      root = await _sharedFolder!();
+    } catch (_) {
+      return const [];
+    }
+    final skip = {for (final p in launch) _normalized(p)};
+    final now = _clock();
+    final keep = <(DateTime, String)>[];
+    try {
+      await for (final entry
+          in Directory(root).list(recursive: true, followLinks: false)) {
+        if (entry is! File || !isWithinFolder(entry.path, root)) continue;
+        if (skip.contains(_normalized(entry.path))) continue;
+        final DateTime modified;
+        try {
+          modified = await entry.lastModified();
+        } catch (_) {
+          continue;
+        }
+        final age = now.difference(modified);
+        if (age < strandedMinAge) continue;
+        if (age > strandedMaxAge) {
+          await _cleanup(entry.path);
+          continue;
+        }
+        keep.add((modified, entry.path));
+      }
+    } catch (_) {
+      // No folder yet, or it cannot be listed: nothing left over.
+    }
+    keep.sort((a, b) => a.$1.compareTo(b.$1));
+    return [for (final k in keep) k.$2];
   }
 
   /// Deletes [path] unread when it is a copy this intake may delete.
