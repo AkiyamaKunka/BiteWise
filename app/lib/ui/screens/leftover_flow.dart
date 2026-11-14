@@ -426,12 +426,6 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     Navigator.of(context).pop(true);
   }
 
-  /// The deduction, compare-and-set (design R6a): the model's fractions
-  /// applied to the meal as stored NOW, written only while it still holds
-  /// exactly that text. A meal that changes between the read and the write
-  /// gets one more re-based try; [_Deduction.changed] after a second miss,
-  /// [_Deduction.gone] for a meal deleted meanwhile (or one the reply no
-  /// longer fits).
   /// One photo from the system picker, or null (cancelled, unreadable or
   /// unavailable, each said or shown here).
   Future<IntakePhoto?> _systemPick() async {
@@ -501,6 +495,12 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         ),
       );
 
+  /// The deduction, compare-and-set (design R6a): the model's fractions
+  /// applied to the meal as stored NOW, written only while it still holds
+  /// exactly that text. A meal that changes between the read and the write
+  /// gets one more re-based try; [_Deduction.changed] after a second miss,
+  /// [_Deduction.gone] for a meal deleted meanwhile (or one the reply no
+  /// longer fits).
   Future<_Deduction> _writeDeduction(int mealId, Map<String, dynamic> reply,
       {required String hash, required String appliedAt}) async {
     final dao = widget.services.dao;
