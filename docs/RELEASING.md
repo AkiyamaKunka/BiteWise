@@ -5,17 +5,19 @@ Play, and everything the owner has to do once by hand before that works.
 Written 2026-10-10 against Flutter 3.44.2, Xcode 26.2 and the GitHub
 `macos-26` / `ubuntu-24.04` runner images; § 1.4, § 1.7, § 4 and the owner
 steps below were brought up to date on 2026-10-25 after an App Review audit
-of the first store build, and on 2026-10-29 with the owner's decisions. The store consoles move around, so treat exact
+of the first store build, and on 2026-10-29 with the owner's decisions; § 6
+(Google Play) was rewritten on 2026-11-13. The store consoles move around, so treat exact
 menu names as "as of this writing".
 
 | Piece | What it does | Secrets |
 |---|---|---|
 | [`.github/workflows/mobile-build.yml`](../.github/workflows/mobile-build.yml) | On every PR and push to `main`, `loop/**`, `feat/**`, `fix/**` (docs-only changes skipped): compiles the iOS project unsigned (Runner **and** ShareExtension) on macOS and the Android app bundle on Ubuntu. Passes today, before any enrolment. | none |
-| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | On a `v*` tag or **Actions → Release → Run workflow**: signed IPA → TestFlight, signed AAB → Play internal track, arm64 APK → GitHub Release. Lanes whose secrets are missing are skipped with a warning naming them. | listed in [§ 3](#3-github-secrets-and-variables) |
+| [`.github/workflows/release.yml`](../.github/workflows/release.yml) | On a `v*` tag or **Actions → Release → Run workflow**: signed IPA → TestFlight, signed AAB → Play internal track (Run workflow can pick the closed test's `alpha` track), arm64 APK → GitHub Release (tags only). Lanes whose secrets are missing are skipped with a warning naming them. | listed in [§ 3](#3-github-secrets-and-variables) |
 | [`.github/workflows/python-tests.yml`](../.github/workflows/python-tests.yml) | The existing server + Flutter test CI. Unchanged. | none |
 | [`app/ios/ExportOptions.plist`](../app/ios/ExportOptions.plist) | Manual-signing export options naming a profile for **both** bundle ids. CI overwrites the team id and profile names with what it reads from the secrets. | |
 | [`app/android/app/build.gradle.kts`](../app/android/app/build.gradle.kts) | Signs the release build with the upload key when `app/android/key.properties` exists, otherwise with the debug key plus a warning. | |
 | [`app/android/whatsnew/`](../app/android/whatsnew/) | Play "What's new" text per locale, sent with every upload. | |
+| [`app/android/store/`](../app/android/store/) | The Play listing (`metadata/`), graphics, the screenshot list, and the App content and Data safety answers (§ 6.5). | |
 
 ```mermaid
 flowchart LR
@@ -35,7 +37,7 @@ Identifiers that must match everywhere:
 | iOS share-extension bundle id | `dev.calorietracker.calorieTracker.ShareExtension` |
 | App Group (both targets) | `group.dev.calorietracker.calorieTracker` |
 | Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` — the paid Apple Developer Program (Individual) since 2026-10-29; the Team ID did not change on enrolment (§ 1.2), so the keychain and the dev build carry over |
-| Android package / application id | `dev.calorietracker.calorie_tracker` (permanent after the first Play upload) |
+| Android package / application id | `dev.calorietracker.calorie_tracker` (permanent once the Play app record exists: Create app asks for it, § 6.1) |
 | Display name | `Chopstats` (Info.plist `CFBundleDisplayName` and en `InfoPlist.strings`, both targets; 筷拍 under zh-Hans); store name `Chopstats · 筷拍` (owner decision R-F9, 2026-10-29; formerly BiteWise) |
 | Version | `app/pubspec.yaml` `version: 1.7.0+9` → `CFBundleShortVersionString` / `versionName` = `1.7.0`; the build number is stamped by CI (§ 5) |
 
@@ -1030,8 +1032,13 @@ step. Revisit if the app is ever published with a developer-run service.
 - Friends' sideloaded APKs: Android upgrades when `versionCode` grows **and**
   the signing key matches. Every APK before this lane was debug-signed, so
   the first upload-key APK needs an uninstall first (the GitHub Release notes
-  say so); after that, upgrades are in place. Whether the GitHub APK and the
-  Play build share a key is decided once, in § 6.3.
+  say so); after that, upgrades are in place. The GitHub APK and the Play
+  build share one key (decision 3, 2026-11-13) once § 6.3's *Change key* is
+  done and checked.
+- A re-run reuses `github.run_number`, so re-running a job that already
+  uploaded to Play fails with "Version code N has already been used":
+  start a new run instead. Renaming `release.yml` restarts `run_number`
+  at 1, so raise `BUILD_NUMBER_OFFSET` in the same change.
 - The GitHub APK is ONE arm64 APK (`flutter build apk --target-platform
   android-arm64`), so its `versionCode` is the same build number as the Play
   bundle's. Never switch it to `--split-per-abi`: Flutter gives a split APK
@@ -1044,17 +1051,95 @@ step. Revisit if the app is ever published with a developer-run service.
 
 ---
 
-## 6. Google Play mirror
+## 6. Google Play
+
+Rewritten 2026-11-13 for the first Google Play release (Android 1.7.0),
+from Google's pages as they read that day; each source below carries its
+read date. The console moves things around: match the wording, not the
+position. The paste-ready answers live next to the app in
+[`app/android/store/`](../app/android/store/): `app_content.md`,
+`data_safety.md`, `metadata/`, `graphics/` and `screenshots/SHOTS.md`.
+
+**The owner's decisions (2026-11-13):**
+
+1. **Photo access:** the first Play build ships **without broad photo
+   access**: no `READ_MEDIA_IMAGES`, `READ_MEDIA_VISUAL_USER_SELECTED` or
+   `READ_EXTERNAL_STORAGE`; Watch Camera Roll and Photo Coverage hidden;
+   Log and Leftovers use Android's system photo picker. The GitHub APK
+   keeps them. No photo-permission declaration for the first submission;
+   asking Google for broad access later is an update (§ 6.5). The Play
+   build itself is a follow-up (§ 6.3, *The Play build*).
+2. **`http://` own-server addresses are refused** on every platform, so
+   Data safety answers "encrypted in transit: Yes" (§ 6.5).
+   <!-- depends: privacy (kRequireHttpsServer flipped to true in the build that ships) -->
+3. **One signer:** keep the package `dev.calorietracker.calorie_tracker`,
+   and make the existing upload key the Play app-signing key (§ 6.3), so
+   Play and GitHub APKs share one signature.
+4. **Android 1.7.0 ships Android-only:** Run workflow › lane `play`, the
+   bundle uploaded to Play by hand, and a GitHub Release made by hand
+   under the tag `android-v1.7.0` (§ 6.6), so `v1.7.0` stays free for the
+   iPhone 1.7.0.
+
+Not decided yet: decision 5 (Android backup beyond Auto Backup and Save
+to device; end-to-end-only cloud backup), 6 (Android look and feel: back
+at the root, predictive back, scrolling), 7 (orientation and large
+screens), 8 (the Meta glasses default on Android), 9 (analysis after you
+leave the app), 10 (restaurant lookups with photo location), 11
+(shortcuts and a widget) and 12 (Health Connect). Nothing below assumes
+an answer to them.
 
 ### 6.1 Account and app record
 
-<https://play.google.com/console> → create a developer account (US$25 once;
-identity verification; a personal account created after 13 Nov 2023 must
-run a closed test with ≥12 testers opted in for 14 continuous days before
-Production is unlocked — the **internal** track, which the friends would use,
-has no such rule). Create app → name `Chopstats · 筷拍`, default language,
-App/Free → the package name is taken from the first upload and is permanent:
-`dev.calorietracker.calorie_tracker`.
+1. <https://play.google.com/console>: create a **personal** developer
+   account (US$25 once) and turn on 2-Step Verification. Verify your
+   identity (legal name and address, from the payments profile), the
+   developer email and the phone, each by one-time code. Google Play shows
+   a personal account's developer name, country and developer email
+   (<https://support.google.com/googleplay/android-developer/answer/13628312>,
+   read 2026-11-13). Choose the public developer name and contact email
+   here; the privacy policy and the listing refer to "the developer name
+   and email shown on Chopstats' Google Play page" instead of repeating
+   them in this repository.
+2. **Trader status**, as soon as the account exists
+   (<https://support.google.com/googleplay/android-developer/answer/17594752>,
+   read 2026-11-13). Non-trader is the usual self-assessment for a free
+   app with nothing for sale; a trader's phone and address are shown to
+   users in the EEA and UK. Google gives no legal advice: this is your
+   call.
+3. **A physical Android phone.** New personal accounts must verify access
+   to a physical, non-rooted Android 10+ phone through the Play Console
+   app before anything can be published; an emulator does not count
+   (<https://support.google.com/googleplay/android-developer/answer/14316361>,
+   read 2026-11-13). Your own phone is an iPhone, so borrow one.
+4. **The closed-test rule.** Personal accounts created after 13 Nov 2023
+   must run a closed test with at least 12 testers opted in continuously
+   for at least 14 days before they can apply for production; internal
+   testing does not count, and review of the application usually takes 7
+   days or less
+   (<https://support.google.com/googleplay/android-developer/answer/14151465>,
+   read 2026-11-13). § 6.6 has the steps.
+5. **Create app**
+   (<https://support.google.com/googleplay/android-developer/answer/9859152>,
+   read 2026-11-13): app name `Chopstats · 筷拍` (14 of 30 characters);
+   package name `dev.calorietracker.calorie_tracker` (Create app asks for
+   it now, and it is permanent: it can never be deleted or reused);
+   default language English (United States); App; Free; the contact
+   email; accept the declarations, including the Play App Signing terms.
+6. **Store settings:** category **Health & Fitness**, the contact email,
+   and the website left empty until the support page covers Android
+   (§ 6.9). Main store listing › *Manage translations* › add Chinese
+   (Simplified), `zh-CN`.
+7. **Developer verification**
+   (<https://developer.android.com/developer-verification>, read
+   2026-11-13): certified Android devices install only apps from
+   registered developers, wherever the app comes from. It has been
+   enforced in Brazil, Indonesia, Singapore and Thailand since 2026-09-30
+   and is planned for every country in 2027. Play registers its own apps
+   automatically; with one signer (§ 6.3) that covers the GitHub APK too.
+   After the first Play release, check Play Console › *Android developer
+   verification* › package names: the package should be listed with the
+   key whose SHA-256 release.yml prints as "APK signer SHA-256". Add the
+   key there if it is missing.
 
 ### 6.2 Upload keystore and `key.properties`
 
@@ -1071,7 +1156,10 @@ Avoid a leading space (Java drops it), and a backslash must be written
 doubled (`\\`) in a hand-written `key.properties`, because that is a Java
 properties file (the workflow doubles it for you). Back the `.jks` up
 somewhere that is not this repo (the root `.gitignore` refuses `*.jks`,
-`*.keystore`, `key.properties`).
+`*.keystore`, `key.properties`). With decision 3 this key signs every
+install, from Play and from GitHub, for as long as the app exists: keep
+the `.jks` and both passwords in a password manager **and** in an offline
+copy.
 
 For a local release build create `app/android/key.properties`:
 
@@ -1089,42 +1177,107 @@ contributors keep working). Secrets (§ 3): `ANDROID_UPLOAD_KEYSTORE_BASE64`
 `ANDROID_KEY_PASSWORD`; variable `ANDROID_KEY_ALIAS` only if you did not use
 `upload`.
 
-### 6.3 First upload is manual; Play App Signing
+### 6.3 Play App Signing, the Play build and the first upload
 
-The Play Developer API cannot create the very first release, and the
-`upload-google-play` action documents the same ("upload an apk or aab
-manually first"). Build it on the Mac with `key.properties` in place:
+**Play App Signing (decision 3).** Google now enrolls a new app in
+quantum-ready hybrid signing with a **Google-generated** key when its
+first bundle is uploaded. To use your own key instead: Play Console ›
+Chopstats › *Protected with Play* › *Play Store protection* › *Manage
+Play app signing* › **Change key** › **Provide a copy of your app signing
+key** (the PEPK tool). Google allows the change only before a release is
+rolled out to open testing or production
+(<https://support.google.com/googleplay/android-developer/answer/9842756>,
+read 2026-11-13), but do it **before the first internal rollout anyone
+installs**: an install that already carries Google's key can only switch
+by uninstalling.
 
-```bash
-cd app && JAVA_HOME=/opt/homebrew/opt/openjdk@17 flutter build appbundle --release
-# → build/app/outputs/bundle/release/app-release.aab, versionCode 7 from pubspec
-```
+1. Run the exact `java -jar pepk.jar …` command the page shows, on the
+   Mac, against `~/upload-keystore.jks` with alias `upload`; it writes an
+   encrypted zip. Upload that zip. The `.jks` itself never leaves the Mac.
+2. Check the result on the same page: the app signing key's SHA-256 must
+   equal the "bundle signer SHA-256" and "APK signer SHA-256" lines that
+   every Release run prints. If the page also lists an added
+   quantum-ready key, ask Play support before telling anyone that the
+   GitHub APK and the Play build can replace each other: Google says
+   Android 17+ strictly enforces the upgraded hybrid key, and whether that
+   applies to a key you provided is not documented.
+3. Google recommends different upload and signing keys. One key for both
+   is the price of one signer. If the key leaks or is lost, Play can still
+   take updates after *Request upload key reset* (it keeps its copy of the
+   signing key), but GitHub APKs could no longer update in place. A
+   separate upload key later would also need release.yml's "APK signer ==
+   bundle signer" check to compare the APK with the app-signing
+   certificate instead.
 
-Play Console → Test and release → Internal testing → Create new release.
-Before the first upload the page asks how to set up **Play App Signing**;
-the choice is permanent for this package name, so decide first:
+**Signing secrets in the protected environment (owner action).** Both
+release.yml jobs already run in the environment `release`, which today has
+no protection rules, so **nothing in the workflow changes**:
 
-- **Recommended here: "Use a different key" → "Export and upload a key
-  from Java keystore".** The console shows the exact `java -jar pepk.jar
-  --keystore=… --alias=upload --output=… --include-cert --rsa-aes-encryption
-  --encryption-key-path=…` command; run it on the Mac against
-  `~/upload-keystore.jks` and upload the encrypted zip it produces. Your
-  upload key is then also the app signing key, so an APK from a GitHub
-  Release and the build Google serves from Play carry the **same**
-  signature: a friend can move between the two with a plain install. Keep
-  the `.jks` backed up regardless (Play can reset a lost *upload* key, but
-  every install is bound to this signing key).
-- **Google's default ("Use a Google-generated key")** keeps your `.jks` as
-  the *upload* key only; Google re-signs every APK it serves with its own
-  key. Simpler, but the GitHub-Release APK and the Play build then have
-  **different** signatures, and moving from one to the other needs an
-  uninstall (export the log first). Pick this only if the sideload channel
-  is going away.
+1. Repository › Settings › Environments › `release`: *Required reviewers*
+   = you; *Deployment branches and tags* = selected: `main`, `release/*`
+   and tags `v*`. A run from any other branch then stops before it can
+   read a secret.
+2. Add `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` and
+   `ANDROID_KEY_PASSWORD` (and later `PLAY_SERVICE_ACCOUNT_JSON`) as
+   **environment** secrets with the same names (an environment secret
+   wins over a repository secret of the same name).
+3. Run Run workflow › `main` › lane `play` once and check the signer
+   lines.
+4. Only then delete the repository-level copies. In this order every run
+   stays signed.
 
-Either way: upload the `.aab`, add testers (email list or a link), save,
-roll out.
+**The Play build (decision 1) — a follow-up, not built yet.** Today
+release.yml builds the bundle and the GitHub APK from one manifest, and
+that manifest declares `READ_MEDIA_IMAGES`, `READ_MEDIA_VISUAL_USER_SELECTED`
+and (up to API 32) `READ_EXTERNAL_STORAGE` for Watch Camera Roll and
+Photo Coverage. **Do not upload a bundle to Play, internal testing
+included, until the Play build exists**: Play would ask for the Photo and
+video permissions declaration. The plan for that follow-up lane:
+
+- a Gradle property (for example `-Pchopstats.channel=play`) whose
+  manifest transform removes the three permissions from the Play
+  bundle's merged manifest (`tools:node="remove"`), or product flavors;
+- a `--dart-define` (for example `CHOPSTATS_CHANNEL=play`) that hides
+  Settings › Photos (Watch Camera Roll, Meta glasses photos, Backfill
+  Lookback, Background scan) and Photo Coverage, and never registers the
+  photo scan; Log and Leftovers already use the system photo picker
+  without full access <!-- depends: photos -->;
+- release.yml builds both: the Play bundle with the property and the
+  define, the GitHub APK as today, and its verify step fails a Play
+  bundle that declares any `READ_MEDIA_*` permission;
+- a notice for a phone that moves from the GitHub APK, with Watch Camera
+  Roll on, to the Play build (same signer): the watcher is turned off,
+  and the app says why.
+
+Before the first upload, check the bundle you are about to upload:
+`bundletool dump manifest --bundle app-release.aab` must list no
+`READ_MEDIA_*` and no `READ_EXTERNAL_STORAGE` permission.
+
+**The first upload.** Once the Play build exists:
+
+1. Actions › Release › Run workflow › branch `main` › lane `play` (leave
+   *play_track* at `internal`). A dispatch creates no tag and no GitHub
+   Release. The plan summary says build name `1.7.0` and build number
+   2xx (`BUILD_NUMBER_OFFSET` 200 + run number), above the 106 that
+   GitHub 1.6.0 users have. Never upload a Mac hand build: it gets
+   pubspec's `+9`, below 106.
+2. Download the artifact `android-1.7.0-2xx` and take `app-release.aab`.
+3. Play Console › *Test and release* › *Testing* › *Internal testing* ›
+   *Create new release* › upload it. **Do not roll it out yet.** First
+   change the signing key (above) and clear every App content alert
+   (§ 6.5).
+4. Name the release `1.7.0 (2xx)`, paste the release notes from
+   `app/android/whatsnew/`, *Save* › *Review* › *Roll out*, and add
+   testers by email list.
+
+The Play Developer API cannot create an app's first release (the
+`upload-google-play` action says to upload one by hand first), and until
+one exists a CI upload with `status: completed` fails with "Only releases
+with status draft may be created on draft app" (§ 9).
 
 ### 6.4 Service account → `PLAY_SERVICE_ACCOUNT_JSON`
+
+Optional, and only after the first manual release (§ 6.3).
 
 1. <https://console.cloud.google.com> → new project `bitewise-play` → APIs
    & Services → Library → enable **Google Play Android Developer API**.
@@ -1136,51 +1289,331 @@ roll out.
    Signing* later, once § 6.1's closed-test rule is satisfied) → Invite.
    Permissions can take a while to propagate; a `403 The caller does not
    have permission` on the first CI run usually means "wait an hour".
-4. `gh secret set PLAY_SERVICE_ACCOUNT_JSON --repo AkiyamaKunka/Chopstats < ~/Downloads/<file>.json`,
+4. Save the file as the **environment** secret `PLAY_SERVICE_ACCOUNT_JSON`
+   in `release` (§ 6.3), for example
+   `gh secret set PLAY_SERVICE_ACCOUNT_JSON --env release --repo AkiyamaKunka/Chopstats < ~/Downloads/<file>.json`,
    then delete the download.
 
-From then on every tag / `play` lane run creates a completed internal-track
-release with the `.aab`, the R8 `mapping.txt` and the text from
-`app/android/whatsnew/whatsnew-<locale>` (≤500 chars; edit before tagging).
+From then on every run with the Android lane uploads a completed release
+with the `.aab`, the R8 `mapping.txt` and the text from
+`app/android/whatsnew/whatsnew-<locale>` (500 characters at most, pinned
+by `app/test/release_decisions_test.dart`; edit it before each upload):
+
+- a `v*` tag push → the **internal** track;
+- Run workflow → the track chosen in **play_track**: `internal`, or
+  `alpha` for the closed test (§ 6.6). `alpha` is the name Play gives its
+  default closed-testing track; Google's API page does not list it, so
+  check the track's name in Play Console first. If your closed track has
+  another name, add it to `play_track`'s options in release.yml.
+
 Play adds an informational "you've not uploaded debug symbols" note on
 every upload; § 9 says why and how to change that.
 
-### 6.5 App content declarations (Policy → App content)
+### 6.5 App content and the store listing
 
-- **Privacy policy**: the same URL as § 1.7.3.
-- **App access**: "All or some functionality is restricted" → instructions
-  for the reviewer identical to § 4.4's notes, including a demo key.
-- **Ads**: no. **Content rating**: questionnaire → Utility/Health. **Target
-  audience**: 18 and over is the simplest truthful answer (keeps the app out
-  of the Families policy); **News app**: no; **Government app**: no.
-- **Data safety**: mirror § 4.3 — photos, typed meal text and health data
-  (meal summaries, dietary profile) are *shared* with the AI provider the
-  user selects (purpose App functionality, processed
-  ephemerally, not stored by the developer); nothing is collected by the
-  developer; data is encrypted in transit; users can delete everything by
-  uninstalling (no account). Declare the local database as on-device only.
-  Restaurant nutrition lookup changes nothing here in v1: on Android it
-  reads no photo location (brand only, no `ACCESS_MEDIA_LOCATION`), and the
-  chain and food names it sends go to the same user-selected provider, so
-  there is no Location row.
-- **Photo and video permissions**: the manifest declares
-  `READ_MEDIA_IMAGES` and `READ_MEDIA_VISUAL_USER_SELECTED` because the core
-  feature is watching the camera roll for new food photos; Play requires
-  this declaration for broad photo access (apps that only pick single photos
-  must use the photo picker instead). Describe the camera-roll watcher as the
-  core functionality.
-- **Advertising ID**: not used.
+Everything under **Policy › App content**, answer by answer, is in
+[`app/android/store/app_content.md`](../app/android/store/app_content.md);
+the Data safety form is in
+[`data_safety.md`](../app/android/store/data_safety.md). Finish them all
+before the first closed-test release: Health apps, Financial features and
+Data safety are required on closed, open and production tracks. In short:
 
-### 6.6 Testers and the friends
+- **Privacy policy:** the same URL as § 1.7.3. Its "Who we are" section
+  names no one in this repository: it points to the developer name and
+  email shown on Chopstats' Google Play page (§ 6.1).
+- **Sign-in details** (formerly *App access*): "All or some functionality
+  is restricted", with the Android steps and the budget-capped demo
+  Gemini key (the key goes only into the console, never into this
+  repository). Keep it valid through every review.
+- **Ads:** No.
+- **Content rating:** the IARC questionnaire, category **Utility,
+  Productivity, Communication, or Other** ("Utility/Health" in the old
+  plan is not an IARC category).
+- **Target audience:** 18 and over only, with *Restrict Minor Access*
+  (the Gemini API terms require users to be 18 or older).
+- **News app:** No. **Government app:** No.
+- **Financial features**
+  (<https://support.google.com/googleplay/android-developer/answer/13849271>,
+  read 2026-11-13): required for every app, closed testing included:
+  **My app doesn't provide any financial features**.
+- **Health apps**
+  (<https://support.google.com/googleplay/android-developer/answer/14738291>,
+  read 2026-11-13): **Nutrition and Weight Management** and **Activity and
+  Fitness**; nothing under Medical; no Health Connect data types.
+- **Health disclaimer**
+  (<https://support.google.com/googleplay/android-developer/answer/16679511>,
+  read 2026-11-13): a health app that is not a medical device puts
+  Google's sentence in its description ("not a medical device and does
+  not diagnose, treat, cure, or prevent any medical condition") and
+  reminds users to consult a healthcare professional. Both full
+  descriptions end with the two sentences, and Settings › Your Data shows
+  them in the app. <!-- depends: privacy (the in-app health footer) -->
+- **Data safety**
+  (<https://support.google.com/googleplay/android-developer/answer/10787469>,
+  read 2026-11-13). Google counts any transfer off the device as
+  collection, whether it goes to the developer or to a third party, and
+  "processed ephemerally" means kept only in memory for the request. So
+  the old plan here ("processed ephemerally… nothing is collected by the
+  developer") was wrong. The answers: **collected** Photos, Health info,
+  Fitness info, Other user-generated content and, only through the
+  restaurant lookup's `US` country code, Approximate location; **shared:
+  No** (user-initiated transfers, and the consent dialog as a prominent
+  disclosure); not ephemeral; optional; App functionality; encrypted in
+  transit; no accounts. Google's form is not Apple's: § 4.3 keeps Location
+  at No for the App Store.
+- **User Data policy**
+  (<https://support.google.com/googleplay/android-developer/answer/10144311>,
+  read 2026-11-13): personal and sensitive data, health data included,
+  must be sent with modern cryptography such as HTTPS (decision 2), and
+  the privacy policy must name the developer and a privacy contact.
+- **Advertising ID:** No (no `AD_ID` permission in the merged manifest).
+- **Photo and video permissions:** nothing to declare for the first
+  submission (decision 1). If Watch Camera Roll comes to Play later, the
+  declaration is filed after uploading the bundle that carries
+  `READ_MEDIA_IMAGES` to internal testing without rolling it out (no
+  Google page says it can be filed earlier), and Google's verdict comes
+  before that release can go out. A refusal means removing the permission
+  from every track and uploading again. Its text and a video script are
+  at the end of `app_content.md`.
+- **AI-Generated Content**
+  (<https://support.google.com/googleplay/android-developer/answer/14094294>,
+  read 2026-11-13): out of scope, as the owner's assessment. The policy
+  targets chatbots, image and voice generators and synthetic media of
+  real people, and leaves out productivity apps that use AI to improve an
+  existing feature. It is a judgment call; `app_content.md` records the
+  reasoning and what a compliant in-app report would cost.
 
-Internal testing holds up to 100 testers by email list, no review, instant.
-The existing APK channel (WeChat) keeps working through the GitHub Release
-the `github-release` job creates on every tag; the signature change means
-one uninstall for people on pre-1.5.0 builds (§ 5). Whether a friend can
-later move between the GitHub APK and the Play build without another
-uninstall depends on the Play App Signing choice in § 6.3: same key → plain
-install; Google-generated key → uninstall first (export the log). The
-GitHub release notes warn about it either way.
+**Store listing**
+(<https://support.google.com/googleplay/android-developer/answer/9866151>
+and <https://support.google.com/googleplay/android-developer/answer/9898842>,
+read 2026-11-13):
+
+- **Text:** `app/android/store/metadata/{en-US,zh-CN}/` holds
+  `title.txt` (30 characters at most), `short_description.txt` (80) and
+  `full_description.txt` (4,000), in fastlane *supply*'s layout so an
+  upload can be automated later; `app/test/release_decisions_test.dart`
+  pins the limits, the disclaimer and the words that must stay out (the
+  GitHub APK, iPhone-only features, Watch Camera Roll, accuracy or
+  user-count claims). The descriptions are the App Store text adapted to
+  Android: the photo picker and the share sheet, keys in Keystore-backed
+  storage, restaurant lookups from printed brands only, no glasses check.
+  The zh-CN text quotes control names and examples in 「」.
+  <!-- depends: photos (the full descriptions' "Android's photo picker") -->
+- **Graphics:** `python3 scripts/play_graphics.py` renders
+  `app/android/store/graphics/icon-512.png` (512 × 512, 32-bit PNG with
+  alpha, at most 1,024 KB) and the feature graphic, which Play requires
+  before publishing: `feature-graphic.png` for en-US and
+  `feature-graphic-zh-CN.png` (1,024 × 500, 24-bit PNG, no alpha). It
+  checks both itself (`--verify`), and so does the test.
+- **Screenshots:** none yet. The QA step captures at least 4 portrait
+  shots per language (9:16, at least 1,080 × 1,920, no alpha) from the
+  Play build, as `app/android/store/screenshots/SHOTS.md` lists. The
+  iPhone sets are about 2.17:1, and Play refuses anything longer than
+  2:1.
+- **What's new:** `app/android/whatsnew/whatsnew-{en-US,zh-CN}`, the
+  first-release note (500 characters at most, no GitHub or APK pointers).
+  It rides every upload, so rewrite it before the next one.
+
+### 6.6 Testing tracks, production and the GitHub APK
+
+- **Internal testing**
+  (<https://support.google.com/googleplay/android-developer/answer/9845334>,
+  read 2026-11-13): up to 100 testers by email list, no review, ready in
+  minutes, and it can start before the app setup is complete. It does not
+  count toward the closed test.
+- **Closed testing (the 14-day test):** create the *Closed testing* track
+  (Play's default closed track is *Alpha*), add at least 12 testers (aim
+  for 15) by email list or Google Group, roll out the same build, and
+  share the opt-in link. Testers need a Google account and Google Play;
+  Play is not available in mainland China (§ 7), so recruit elsewhere.
+  Keep everyone opted in for 14 consecutive days: a tester who opts out
+  and rejoins starts again. Keep a short log of feedback and changes for
+  the production application. Fixes go out as new closed-test builds, by
+  hand or with Run workflow › lane `play` › *play_track* `alpha` once
+  `PLAY_SERVICE_ACCOUNT_JSON` exists (§ 6.4).
+- **Production:** on day 15 or later, Dashboard › *Apply for production*,
+  answering from the log; review usually takes 7 days or less, and Google
+  may ask for more testing. Then release to production with a staged
+  rollout (for example 20%, then 100%).
+
+**Android 1.7.0, Android-only (decision 4).** release.yml runs both lanes
+on any `v*` tag, and the iOS lane stops until the iCloud container exists
+(§ 11.1). So Android goes first without a `v*` tag:
+
+1. Actions › Release › Run workflow › `main` › lane **`play`**. The
+   artifact `android-1.7.0-2xx` holds the bundle and the arm64 APK, with
+   one build number and one signer (the verify step checks both).
+2. The bundle goes to Play by hand (§ 6.3).
+3. The APK goes on a GitHub Release made by hand: tag the run's commit
+   `android-v1.7.0` and push the tag (`git tag android-v1.7.0 <sha> &&
+   git push origin android-v1.7.0`), then GitHub › Releases › *Draft a new
+   release* › tag `android-v1.7.0` › title `Chopstats Android 1.7.0` ›
+   attach the APK renamed `Chopstats-v1.7.0-b2xx-arm64-v8a.apk` (the name
+   release.yml's own releases use) › notes (below) › *Publish*.
+   release.yml triggers only on tags matching `v*`, and `android-v1.7.0`
+   does not match it (pinned by `release_decisions_test.dart`), so no run
+   starts and no iOS build is attempted. `python-tests.yml` runs on every
+   push, tags included; that is harmless.
+4. Notes: what changed for Android since 1.6.0, including PR #60's fix to
+   shared photos; installing over a GitHub build from 1.5.0 or later keeps
+   the data. Say that the GitHub APK and the Play build can replace each
+   other **only after** § 6.3's step 2 check has passed, and say that the
+   Play build has no Watch Camera Roll.
+
+Later, when the iPhone 1.7.0 is ready, tag `v1.7.0` on `main` as usual.
+That run also builds Android again, with a higher build number: it puts
+that APK on the `v1.7.0` release and, with `PLAY_SERVICE_ACCOUNT_JSON`
+set, sends the bundle to the internal track. Both are harmless (an
+upgrade for anyone who installs them).
+
+**The friends and the GitHub APK.** Google Play is not available in
+mainland China, so the GitHub Release APK stays (§ 7). With one signer
+(decision 3), a phone can move between the GitHub APK and the Play build
+by installing the other over it, as long as the version code is higher;
+the data stays. The Play build has no Watch Camera Roll (decision 1), so
+someone who moves from the GitHub APK to Play loses it (the follow-up's
+notice says so). Until § 6.3's check has passed, tell people to export
+first (Settings › Your Data › *Export Data…*). The notes release.yml
+writes on `v*` tags still say the two "can carry different signatures";
+make them definitive after that check.
+
+### 6.7 Android platform checks
+
+- **Target API**
+  (<https://support.google.com/googleplay/android-developer/answer/11926878>,
+  read 2026-11-13): new apps and updates must target Android 16 (API 36)
+  since 2026-08-31; the extension window closed on 2026-11-01. Met:
+  `app/android/app/build.gradle.kts` takes `flutter.targetSdkVersion`,
+  which is 36 in Flutter 3.44.2 (compileSdk is 37). Check a build with
+  `aapt2 dump badging app-release.apk | grep -o "targetSdkVersion:'[0-9]*'"`.
+  Google raises the level every year: plan the next Flutter upgrade for
+  it.
+- **16 KB memory pages**
+  (<https://developer.android.com/guide/practices/page-sizes>, read
+  2026-11-13): apps targeting API 35+ must support 16 KB pages on 64-bit
+  devices, and from 2027-02-01 an update that does not cannot be
+  released. Met on `main` 9d7b4d2 (every 64-bit `.so` has LOAD alignment
+  of at least 16 KB and a safe RELRO end; `zipalign` passes). Check a new
+  build, with the NDK's `llvm-readelf` and build-tools' `zipalign`:
+
+  ```bash
+  ndk="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/bin"
+  d=$(mktemp -d) && unzip -q -o app-release.apk 'lib/arm64-v8a/*' -d "$d"
+  for so in "$d"/lib/arm64-v8a/*.so; do echo "$so"; "$ndk/llvm-readelf" -Wl "$so" | grep -E 'LOAD|GNU_RELRO'; done
+  "$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/zipalign" -c -P 16 -v 4 app-release.apk | tail -n 1
+  ```
+
+  Every LOAD line's last column must be `0x4000` or more; `zipalign` must
+  end with "Verification successful". The emulator check (an image whose
+  `adb shell getconf PAGE_SIZE` prints 16384) belongs to the QA step.
+- **Advisory Play warnings to expect** (not blockers): the "debug
+  symbols" note (§ 9; check with `unzip -l app-release.aab | grep
+  debugsymbols` whether the bundle already carries them), and, observed by
+  developers but on no Google page, an edge-to-edge "deprecated APIs"
+  recommendation caused by Flutter engine calls that only run below
+  API 35.
+- **When the app moves to API 37:**
+  - local network access becomes a runtime permission
+    (`ACCESS_LOCAL_NETWORK`, in the nearby-devices group) and is blocked
+    by default, which matters for "Your own server" on a LAN or private
+    address; check the resolved address, not the URL text. Play announced
+    a matching policy on 2026-10-29, with declarations from June 2027;
+  - the opt-out from Android 16's large-screen rules (orientation and
+    resizability are ignored at 600 dp and wider) ends.
+
+### 6.8 Owner checklist, in order
+
+Do now:
+
+1. Read decisions 1–4 above; they are settled. Decisions 5–12 can wait
+   for the closed test.
+2. Create the personal Play Console account, with 2-Step Verification,
+   identity, email and phone checks, the public developer name and contact
+   email, and the trader-status declaration (§ 6.1).
+3. Verify a borrowed physical Android 10+ phone through the Play Console
+   app (§ 6.1).
+4. Back up the upload keystore and both passwords offline. Protect the
+   `release` environment and move the Android signing secrets into it, in
+   § 6.3's order.
+5. Create the app record and the store settings (§ 6.1), then fill in
+   App content and Data safety from `app/android/store/` (§ 6.5).
+6. Store listing: paste the en-US and zh-CN title, short and full
+   descriptions; upload `icon-512.png` and the feature graphics.
+
+Only after the Play build (§ 6.3) is merged and the QA step has captured
+the screenshots:
+
+7. Upload the screenshots (at least 4 per language).
+8. Run workflow › `main` › lane `play`; check the plan summary's build
+   number and the bundle's permissions (§ 6.3).
+9. Upload the bundle to Internal testing. **Do NOT roll it out yet:**
+   change the signing key to the upload key first (§ 6.3), and check the
+   SHA-256.
+10. Roll out to internal; install from Play on a real phone; try the
+    picker, a share, Describe a meal and the daily summary.
+11. Create the closed track, add at least 12 testers outside mainland
+    China, roll out, share the opt-in link, and start the 14-day log.
+12. Publish the GitHub APK as `android-v1.7.0` by hand (§ 6.6).
+
+Optional, only after the first manual rollout:
+
+13. The service account and `PLAY_SERVICE_ACCOUNT_JSON` in the `release`
+    environment (§ 6.4), then later builds go out with play_track
+    `internal` or `alpha`.
+
+Only on day 15 or later of the closed test, with 12 or more testers still
+opted in:
+
+14. Dashboard › *Apply for production*. Then a staged production rollout.
+
+Only after the production release is live:
+
+15. Check Android developer verification lists the package and the key
+    (§ 6.1).
+16. Apply the support page text (§ 6.9) and update the README's Android
+    section with the Play link.
+
+**Do NOT revoke the demo Gemini key** while any review is pending (the
+closed test, the production application or an update): the reviewer
+uses it.
+
+### 6.9 When Android ships on Google Play: the support page
+
+`docs/SUPPORT.md` is the App Store listing's support URL and, like the
+README, describes what is in the App Store: today it is iPhone-only on
+purpose (owner decision R-F14, pinned by `release_decisions_test.dart`,
+because Apple's guideline 2.3.10 frowns on naming other platforms in an
+app's metadata). The Play listing can leave its website field empty until
+Android is in production. Then, in one PR, and only with the owner's OK
+to relax R-F14 (the page becomes the support page of both stores; the
+test keeps banning the APK, sideloading, Telegram and VPN advice, and
+starts allowing Android and Google Play):
+
+1. **Intro:** "Chopstats is an iPhone app (iOS 15 or later)" becomes
+   "Chopstats is an app for iPhone (iOS 15 or later) and Android phones
+   (Android 7.0 or later, from Google Play)".
+2. **What it does › Log a meal:** add "on Android, **+ Log** › *From
+   recent photos* opens Android's photo picker, which needs no access to
+   your whole library; or share a photo into Chopstats from Google Photos
+   or another app". <!-- depends: photos -->
+3. **What it does › Watch Camera Roll:** add "(iPhone; not in the Google
+   Play version)".
+4. **Getting started, step 2:** "it is kept in the iOS Keychain on this
+   phone" becomes "on iPhone it is kept in the iOS Keychain; on Android in
+   encrypted storage protected by the Android Keystore, which Android's
+   backup and device transfer leave out". <!-- depends: native (the secure-storage files excluded from backup and transfer) -->
+5. **Troubleshooting › Watch Camera Roll misses photos:** add that the
+   Google Play version has no Watch Camera Roll.
+6. **Your data:** under **Export Data…**, add "on Android, **Save to
+   device…** saves the file to a folder you pick"; under Delete
+   everything, add that on Android uninstalling removes the API keys too
+   (unlike the iOS Keychain), and that Android may offer to keep the
+   app's data. <!-- depends: privacy (the Save to device… label), native (hasFragileUserData) -->
+7. **Contact:** keep GitHub issues; add "or the developer email shown on
+   Chopstats' Google Play page".
+
+Check every label against `app_en.arb` on the day; the zh labels are for
+the README, not this page.
 
 ---
 
@@ -1202,14 +1635,18 @@ GitHub release notes warn about it either way.
 
 (Before the first 1.7.0 tag: § 11, the iCloud container, or the iOS lane
 stops at "Check the Runner profile allows the iCloud container". Once
-1.7.0 is in the App Store: § 12, the support page.)
+1.7.0 is in the App Store: § 12, the support page. Android 1.7.0 goes
+first without a `v*` tag: § 6.6.)
 
 ```bash
 # 1. in the shipping PR: app/pubspec.yaml  version: 1.7.0+9   (the +N is for hand builds only)
 # 2. edit app/android/whatsnew/whatsnew-*.{en-US,zh-CN}
 # 3. merge to main, then
-git tag v1.6.0 && git push origin v1.6.0     # iOS + Android lanes, external-eligible TestFlight build, GitHub Release
-# or: Actions → Release → Run workflow → lane testflight | play | both (internal-only TestFlight build)
+git tag v1.7.0 && git push origin v1.7.0     # iOS + Android lanes, external-eligible TestFlight build, GitHub Release
+# or: Actions → Release → Run workflow → lane testflight | play | both (internal-only TestFlight build;
+#     play_track internal | alpha picks the Play track when PLAY_SERVICE_ACCOUNT_JSON is set)
+# Android only (decision 4): Run workflow → lane play, then a hand-made GitHub Release
+#     under an android-vX.Y.Z tag, which starts no run (§ 6.6)
 ```
 
 Artifacts kept 90 days on the run page: the IPA + dSYMs + Dart symbols
@@ -1330,7 +1767,9 @@ the service account is not invited to the app (§ 6.4), the permission has
 not propagated yet, or the first manual upload (§ 6.3) never happened.
 
 **Play: "Only releases with status draft may be created on draft app"** —
-the app record has never had a completed release; do § 6.3 first.
+the app record has never had a completed release; do § 6.3 first. The
+workflow uploads with `status: completed`, to internal on a tag push and to
+*play_track* on Run workflow, so the first release must be made by hand.
 
 **Gradle and the Aliyun mirrors** — `settings.gradle.kts` and
 `build.gradle.kts` put the Aliyun mirrors first only for builds on the
@@ -1360,7 +1799,7 @@ raw file instead of its base64 text. Re-create it with `base64 -i <file>`.
 | Every year | Apple Developer Program renewal (auto-renew is available). |
 | When GitHub rotates the macOS image | `XCODE_VERSION` in both workflows; pin a new one or float. |
 | When Flutter is upgraded on the Mac | `FLUTTER_VERSION` in `mobile-build.yml` and `release.yml`, in the same PR as the `pubspec.lock` change (`python-tests.yml` floats on `stable` and needs nothing). |
-| Never, unless compromised | The ASC API key, the Play service account key, the upload keystore (if lost: § 6.3 key reset). |
+| Never, unless compromised | The ASC API key, the Play service account key, the upload keystore (if lost: Play takes updates again after *Request upload key reset*, § 6.3; GitHub APKs can no longer update in place). |
 
 ---
 

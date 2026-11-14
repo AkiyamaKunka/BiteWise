@@ -942,4 +942,73 @@ void main() {
     });
   });
 
+  group('RELEASING § 6 (Google Play)', () {
+    final releasing = _readRepo('docs/RELEASING.md');
+    final s6 = releasing
+        .substring(releasing.indexOf('## 6. Google Play'),
+            releasing.indexOf('## 7. China mainland'))
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    test('the old wrong answers are gone', () {
+      expect(s6, isNot(contains('processed ephemerally, not stored')));
+      expect(s6, isNot(contains('questionnaire → Utility/Health')));
+      expect(s6,
+          isNot(contains('Describe the camera-roll watcher as the core')));
+      expect(s6, isNot(contains('the package name is taken from the first')));
+    });
+
+    test('carries the verified answers and the owner decisions', () {
+      for (final fact in [
+        'Utility, Productivity, Communication, or Other',
+        "My app doesn't provide any financial features",
+        'Nutrition and Weight Management',
+        'Activity and Fitness',
+        'at least 12 testers opted in continuously for at least 14 days',
+        'internal testing does not count',
+        'Trader status',
+        'physical, non-rooted Android 10+ phone',
+        'Provide a copy of your app signing key',
+        'android-v1.7.0',
+        '### 6.7 Android platform checks',
+        '### 6.8 Owner checklist, in order',
+        'Do not roll it out yet.',
+        'Do NOT revoke the demo Gemini key',
+        'Not decided yet',
+      ]) {
+        expect(s6, contains(fact), reason: fact);
+      }
+    });
+
+    test('every Google page it cites carries its read date', () {
+      final urls = RegExp(r'<(https://(?:support\.google\.com|developer\.'
+              r'android\.com)[^>]*)>')
+          .allMatches(s6)
+          .map((m) => m.group(1)!)
+          .toSet();
+      expect(urls.length, greaterThanOrEqualTo(12));
+      for (final url in urls) {
+        final at = s6.indexOf(url);
+        final after =
+            s6.substring(at, (at + url.length + 120).clamp(0, s6.length));
+        expect(after, contains('read 2026-11-13'), reason: url);
+      }
+    });
+
+    // The support page stays iPhone-only (R-F14 above) until Android is in
+    // production; its Android text waits in § 6.9.
+    test("§ 6.9 holds the support page's Android text", () {
+      final en = AppLocalizationsEn();
+      const heading =
+          '### 6.9 When Android ships on Google Play: the support page';
+      expect(s6, contains(heading));
+      final s69 = s6.substring(s6.indexOf(heading));
+      for (final label in [
+        en.addFromPhotos,
+        en.settingsRowWatch,
+        en.settingsRowExport,
+      ]) {
+        expect(s69, contains(label), reason: label);
+      }
+    });
+  });
 }
