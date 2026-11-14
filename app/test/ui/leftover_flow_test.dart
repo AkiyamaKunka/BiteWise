@@ -1054,6 +1054,62 @@ void main() {
       expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget);
     });
 
+    testWidgets('at AX5 on a 320 pt phone the picker step fits and its '
+        'button is reachable', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker();
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(53 / 17)),
+          child: child!,
+        ),
+        home: LeftoverScreen(
+            systemPicker: system,
+            services: UiServices(
+              dao: dao,
+              analyzer: analyzer,
+              executor: FakeExecutor(),
+              settings: FakeSettings(),
+              picker: listing,
+              requestPhotoPermission: () async => false,
+            )),
+      ));
+      await tester.pumpAndSettle();
+      final meal = find.byKey(const Key('leftoverMeal-1'));
+      await tester.scrollUntilVisible(meal, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(meal);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(system.picks, [1]);
+      final button = find.byKey(const Key('leftoverChooseAllPhotos'));
+      await tester.scrollUntilVisible(button, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(system.picks, [1, 1]);
+    });
+
+    testWidgets('with full access, a picker that cannot open from the row '
+        'says so; the grid stays', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker(
+          broad: true,
+          replies: [const SystemPick(SystemPickStatus.unavailable)]);
+      await pumpPicker(tester, system);
+      await chooseMeal(tester);
+      await tester.tap(find.byKey(const Key('leftoverChooseAllPhotos')));
+      await tester.pumpAndSettle();
+      expect(find.text(AppLocalizationsEn().addPickerUnavailable),
+          findsOneWidget);
+      expect(find.byKey(const Key('leftoverPhoto-lp1')), findsOneWidget);
+    });
+
     testWidgets('a build without the native picker keeps the old grid flow',
         (tester) async {
       dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));

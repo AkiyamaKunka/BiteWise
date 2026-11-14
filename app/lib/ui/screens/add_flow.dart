@@ -362,7 +362,12 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
         return;
       case SystemPickStatus.unavailable:
         // No library request here: on the Play build it could only fail.
+        // Over the grid the page note is not on screen: a snackbar says it.
         setState(() => _pickerUnavailable = true);
+        if (_pickerRow) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(context.l10n.addPickerUnavailable)));
+        }
         return;
       case SystemPickStatus.busy:
         return;

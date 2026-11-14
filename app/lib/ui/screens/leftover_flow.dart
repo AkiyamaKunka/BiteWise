@@ -450,7 +450,9 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         return null;
       case SystemPickStatus.unavailable:
         // No library request here: on the Play build it could only fail.
+        // Over the grid the step's note is not on screen: a snackbar says it.
         setState(() => _pickerUnavailable = true);
+        if (_pickerRow) _snack(context.l10n.addPickerUnavailable);
         return null;
       case SystemPickStatus.cancelled:
       case SystemPickStatus.busy:

@@ -349,6 +349,43 @@ void main() {
     });
   });
 
+  // The picker page at accessibility sizes: the note, the button and the
+  // tip scroll instead of overflowing, and the button can still be reached.
+  for (final (size, scale) in const [
+    (Size(320, 568), 53 / 17), // AX5 on an SE (1st gen)
+    (Size(375, 667), 2.35), // AX3 on an SE
+  ]) {
+    testWidgets(
+        'at ${scale.toStringAsFixed(2)}x on ${size.width.toInt()} pt the '
+        'picker page fits and its button is reachable', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final w = _World(
+          outcome: const PhotoOutcome(PhotoOutcomeKind.skipped, 'not food'));
+      final system = FakeSystemPicker(replies: [_ok()]);
+      await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: AddPhotoScreen(services: w.services, systemPicker: system),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final button = find.byKey(const Key('addChooseAllPhotos'));
+      await tester.scrollUntilVisible(button, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(system.picks, [1, 1]);
+    });
+  }
+
   group('full photo access (the GitHub APK, once granted)', () {
     testWidgets('the grid as before, plus a row that opens the picker',
         (tester) async {
@@ -382,6 +419,25 @@ void main() {
       expect(w.picker.loadedOriginals, ['a0']);
       expect(system.picks, isEmpty);
       expect(w.processed.single.assetId, 'a0');
+    });
+
+    testWidgets('a picker that cannot open from the row says so; the grid '
+        'stays', (tester) async {
+      final w = _World(full: true);
+      w.picker.photos = [_gridPhoto('a0')];
+      final system = FakeSystemPicker(
+          broad: true,
+          replies: [const SystemPick(SystemPickStatus.unavailable)]);
+      await _open(tester,
+          AddPhotoScreen(services: w.services, systemPicker: system));
+      await tester.tap(find.byKey(const Key('addChooseAllPhotos')));
+      await tester.pumpAndSettle();
+      expect(
+          find.text("The photo picker can't open on this phone. You can still "
+              'share a photo to Chopstats from your gallery app.'),
+          findsOneWidget,
+          reason: 'it did nothing at all');
+      expect(find.byKey(const Key('recentPhoto0')), findsOneWidget);
     });
 
     testWidgets('cancelling the picker from the row keeps the grid',
