@@ -746,6 +746,23 @@ void main() {
     });
   });
 
+  group("Play What's new (app/android/whatsnew)", () {
+    test('both texts exist, fit 500 characters and point nowhere else', () {
+      for (final locale in ['en-US', 'zh-CN']) {
+        final text = _read('android/whatsnew/whatsnew-$locale');
+        expect(text.trim(), isNotEmpty, reason: locale);
+        expect(text.runes.length, lessThanOrEqualTo(500), reason: locale);
+        expect(
+            RegExp(r'github|\bapk\b|release notes|发布说明|camera roll|监控相册',
+                    caseSensitive: false)
+                .firstMatch(text)
+                ?.group(0),
+            isNull,
+            reason: locale);
+      }
+    });
+  });
+
   group('Play graphics, the themed icon and the Android 12+ splash', () {
     test('icon-512 is a 512 x 512 32-bit PNG of at most 1024 KB', () {
       final icon =
