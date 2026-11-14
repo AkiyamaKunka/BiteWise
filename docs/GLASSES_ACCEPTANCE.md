@@ -354,7 +354,32 @@ The "Oct 21 research" is the camera-glasses research run of 2026-10-21 (its note
 
 ---
 
-## 9. For Claude after the owner reports (not for the owner)
+## 9. Android: the same test on an Android phone (GitHub APK only)
+
+Added 2026-11-13 for the Google Play work. Everything above is written for the iPhone. On Android, automatic logging of glasses photos needs **Watch Camera Roll**, which only the GitHub APK has: the Google Play build has no broad photo access (owner decision 1, 2026-11-13), so there glasses photos are logged only when you pick or share them, like any photo. The facts marked **to confirm** come from code reading and community reports, not from a real Android phone with the glasses; this checklist is what confirms them.
+
+What the app does on Android today (from the code):
+- **Recognition:** the same string table as on iPhone (`MetaGlassesStrings`, `services/photo/glasses.dart`): a file name containing `singular_display`, or EXIF Make containing "Meta" with a Model containing "Ray-Ban", "Oakley" or "glasses". There is **no album signal** and **no "added to the library" time** on Android, so the Glasses check card shows no import lag there, and the **Late imports** card never appears.
+- **No on-phone food check:** Apple's image classifier has no Android twin, so every recognized glasses photo goes to your AI service, non-food ones included, up to **15 per scan** (`glassesPerScanLimit`); the rest wait for the next scan. **Meta glasses photos** (Settings › Photos) is on by default on Android too; whether to default it to Off there is owner decision 8, not decided yet.
+- **Pickup:** while Chopstats is open, the watcher sees new photos as they arrive; otherwise a WorkManager job runs about every 30 minutes when the phone has a network (Android can delay it, more so in battery saver or the Rare and Restricted standby buckets), and opening the app catches up. A photo imported late is picked up only while its capture time is inside the look-back window (Backfill Lookback), because Android has no change history like iOS's.
+
+### A-Android. Where does the Meta AI app put imports? (once, about 15 min)
+1. Install **Meta AI** from Google Play, pair the glasses, and check that auto-import is on (the menu names may differ from the iPhone list in 1.1). **To confirm:** whether import needs the app open, and which permissions Android asks Meta AI for.
+2. Take 1 photo with the glasses and fold them. In Google Photos (or the phone's gallery), find the photo and write down: the **folder or album** it is in (**to confirm**: the folder name, for example under Pictures or DCIM), the **file name** (digits as `#`), and in the photo's details the **camera** line (Make/Model, **to confirm**: the same strings as on iPhone?), the size in MP, and whether it has a location.
+3. Wait 15 minutes between shutter and fold once, as in A2, and write down whether the gallery shows the shutter time or the fold time.
+
+### B-Android. Does the GitHub APK log them?
+1. In Chopstats › Settings: an API key, **Watch Camera Roll** on (allow **all** photos when Android asks; with *Allow limited access* new photos are invisible to the app), **Meta glasses photos** on.
+2. Take 2 food and 2 non-food glasses photos, fold the glasses, leave Chopstats in the background (not swiped away), and wait at least 45 minutes with the phone online.
+3. Open Chopstats › Settings › AI Provider › Test This Provider and read **Recent background scans** (a scan that started before you opened the app, with "logged" 1 or more) and **Glasses check** (signal `filename` or `exif`, the outcome, an empty food score).
+4. **Expected:** both food photos logged with the glasses badge; the non-food photos sent and then not logged (the AI says not food); meal times equal to the shutter times.
+5. Optional, the quota: take 20 photos, fold, and check that one scan sends at most 15 and the next scan takes the rest.
+
+Send the same values as in section 5, plus the folder name and the Make/Model text. On Android, never send screenshots of the gallery either.
+
+---
+
+## 10. For Claude after the owner reports (not for the owner)
 
 - Record the results in memory under H1, with the checklist outcome and the deadline decision.
 - Update from the measured values:

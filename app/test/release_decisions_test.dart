@@ -554,8 +554,10 @@ void main() {
       // 1.7.0 iCloud Backup (PR #36: the iCloud Backup section). Review
       // r171 changed it on 2026-11-13: activities in what an export holds,
       // and that iOS can keep API keys in the Keychain after uninstalling.
-      // If that branch merges on a later day, set the date and this pin to
-      // the merge date.
+      // The Google Play release (android/release, 2026-11-13) changed it
+      // again: Who we are, adults only, https only, and Android's backup
+      // leaving the keys out. If that branch merges on a later day, set the
+      // date and this pin to the merge date.
       expect(policy, contains('Effective date: 2026-11-13'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
@@ -615,6 +617,45 @@ void main() {
           '只会把它发送给你在 设置 › AI 服务 里设置的那个 AI 接收方',
         ),
       );
+    });
+
+    // Google Play's User Data policy wants the developer and a privacy
+    // contact in the policy (answer/10144311). Nothing personal is written
+    // here: the policy points at the store pages and the support page.
+    test('Who we are: the store pages and a contact, adults only, '
+        'in English and 中文', () {
+      final flat = policy.replaceAll(RegExp(r'\s+'), ' ');
+      expect(policy, contains('### Who we are'));
+      expect(policy, contains('### 我们是谁'));
+      expect(flat, contains("the developer email shown on Chopstats' Google "
+          'Play page'));
+      expect(flat, contains('筷拍 Google Play 页面上显示的开发者邮箱'));
+      expect(policy, contains('(SUPPORT.md#contact)'));
+      expect(flat, contains('Chopstats is meant for adults (18 and over).'));
+      expect(flat, contains('筷拍面向成年人（18 岁及以上）'));
+      // No address of its own: the one public address lives on the
+      // support page (R-F14 above).
+      expect(
+          RegExp(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]').hasMatch(policy),
+          isFalse);
+    });
+
+    // Owner decision 2 (2026-11-13): plain http:// server addresses are
+    // refused everywhere, so nothing goes unencrypted.
+    test('your own server is https only, in English and 中文', () {
+      final flat = policy.replaceAll(RegExp(r'\s+'), ' ');
+      expect(
+          flat,
+          contains('The address must start with `https://`: the app refuses '
+              'an `http://` address and sends nothing to it'));
+      expect(flat,
+          contains('服务器地址必须以 `https://` 开头：应用会拒绝 `http://` 地址'));
+      expect(flat,
+          contains('Every request leaves the phone over an encrypted HTTPS '
+              'connection.'));
+      expect(flat, contains('所有请求都通过加密的 HTTPS 连接离开手机。'));
+      expect(flat,
+          isNot(contains('over `http://` lookups use printed brands only')));
     });
 
     test('Describe sends no meals; Fix sends the last 7 days', () {

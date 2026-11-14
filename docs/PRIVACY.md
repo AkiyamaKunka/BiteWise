@@ -11,6 +11,18 @@ short text descriptions using an AI service **you** choose. It is an
 open-source project. The developer runs **no backend server, has no user
 accounts, and receives none of your data.**
 
+### Who we are
+
+Chopstats is made by one individual developer: the developer named on
+Chopstats' App Store and Google Play pages. For a privacy question or
+request, write to the developer email shown on Chopstats' Google Play
+page, or to the address on the [support page](SUPPORT.md#contact). You can
+also open an issue on GitHub (issues are public, so never post personal
+data there).
+
+Chopstats is meant for adults (18 and over). It is not directed at
+children.
+
 ### What stays on your phone
 
 - Your meal log, the small meal thumbnails, your weight, body
@@ -85,7 +97,12 @@ lookup* below.
   yourself; from there it reaches the AI plan you configured on that
   server. While your server's address is set, the
   app also asks it for the day's Garmin activity summary for the Today
-  screen (only the date is sent).
+  screen (only the date is sent). The address must start with `https://`:
+  the app refuses an `http://` address and sends nothing to it, so photos,
+  meal text and your server's upload key never travel unencrypted.
+  <!-- depends: privacy (http:// refused everywhere: kRequireHttpsServer = true) -->
+
+Every request leaves the phone over an encrypted HTTPS connection.
 
 **Which photos are sent:**
 
@@ -125,10 +142,11 @@ lookup* below.
 
 - *Describe a meal* (for example "I had a bowl of noodles"): your text and
   today's date. No other meals are sent.
-- *Fix or delete a meal* (for example "the noodles were roast duck rice" or
-  "delete lunch"): your text, today's date, and the descriptions, items, dates,
-  times and calorie estimates of your meals from the last 7 days so the AI
-  can find the meal you mean.
+- *Fix or delete a meal* (for example "the noodles were roast duck rice",
+  "delete lunch", "I weigh 72 kg" or "burned 450 calories on my 5 km run";
+  the last two log a weight or an activity): your text, today's date, and
+  the descriptions, items, dates, times and calorie estimates of your meals
+  from the last 7 days so the AI can find the meal you mean.
 
 The connection check in Settings contacts only the selected service (or
 your server) and sends a fixed test message and a built-in test image, plus
@@ -194,9 +212,9 @@ service or server.
   meal's time or description, your dietary profile or your meal history.
 - **Who receives it, and does the web search:**
   - **Your own server:** your server, which searches with Claude web search
-    (Anthropic) under your plan. Chain names found from a photo's location
-    are sent to your server only when its address starts with `https://`;
-    over `http://` lookups use printed brands only. Your server keeps a
+    (Anthropic) under your plan. Like everything else, lookups go to your
+    server only when its address starts with `https://`; an `http://`
+    address is refused and gets no lookups at all. Your server keeps a
     lookup's request and answer in memory for up to 24 hours. With your own
     server the app only *suggests* the chain's published numbers: a meal
     changes only when you accept.
@@ -269,7 +287,11 @@ server holding it, Chopstats copies it to **your own iCloud Drive**.
   backups on iPhone, and Android's system backup, which may keep a copy
   in your own Google account. The records described above as kept outside
   backups (the Meta glasses record and the restaurant lookup files) are
-  not included, and neither are they in iCloud Backup.
+  not included, and neither are they in iCloud Backup. On Android, API
+  keys and your own server's upload key are also left out of Android's
+  backup and of a transfer to a new phone, so after a restore the app asks
+  for them again.
+  <!-- depends: native (the flutter_secure_storage files excluded from cloud-backup, device-transfer and full-backup-content) -->
 
 ### Deleting your data
 
@@ -347,7 +369,7 @@ and Zhipu process data in mainland China, as the consent dialog says.
 ### Changes and contact
 
 Changes to this policy are published in this file, with a new effective
-date. Questions: open an issue at
+date. Questions: see *Who we are* above, or open an issue at
 <https://github.com/AkiyamaKunka/Chopstats/issues>.
 
 ---
@@ -355,6 +377,12 @@ date. Questions: open an issue at
 ## 中文
 
 筷拍是一款卡路里记录应用：它借助**你自己选择**的 AI 服务，根据食物照片和简短的文字描述估算每一餐。本项目开源。开发者**不运营任何后端服务器、没有用户账户，也不会收到你的任何数据。**
+
+### 我们是谁
+
+筷拍由一位个人开发者开发，即筷拍在 App Store 和 Google Play 页面上署名的开发者。如有隐私问题或请求，请发邮件到筷拍 Google Play 页面上显示的开发者邮箱，或[支持页面](SUPPORT.md#contact)上的邮箱地址。你也可以在 GitHub 上提交 issue（issue 是公开的，请不要在里面发布个人数据）。
+
+筷拍面向成年人（18 岁及以上），不面向儿童。
 
 ### 留在你手机上的数据
 
@@ -374,7 +402,10 @@ date. Questions: open an issue at
 数据离开手机是为了连接你在设置中选择的 AI 服务，并使用**你自己的 API Key**（使用「你自己的服务器」时，是你自己运行的服务器）。除了 iPhone 上「**iCloud 备份**」保存在你自己 iCloud 里的副本（见下文「**iCloud 备份**」），除非你开启「**餐厅营养**」查询，否则不会有其他数据离开手机；开启后，在 iPhone 上照片的拍摄位置会发送给 Apple 地图，查询会发送给该 AI 服务的网页搜索，详见下文「**餐厅营养查询**」。
 
 - Google Gemini、OpenAI、Anthropic（Claude）、DeepSeek 深度求索、xAI（Grok）、OpenRouter、阿里云（Qwen 通义千问）、火山引擎 / 字节跳动（Doubao 豆包）或智谱（GLM）。它们如何处理你发送的内容，以它们各自的隐私政策和条款为准。
-- **你自己的服务器**（设置 › AI 服务 › 你自己的服务器）会把同样的数据发送到**你自己运行**、由你亲自填写地址的服务器，再由它转给你在该服务器上配置的 AI 套餐。填写了服务器地址后，应用还会向这台服务器请求当天的 Garmin 活动摘要，用于「今天」页面（只发送日期）。
+- **你自己的服务器**（设置 › AI 服务 › 你自己的服务器）会把同样的数据发送到**你自己运行**、由你亲自填写地址的服务器，再由它转给你在该服务器上配置的 AI 套餐。填写了服务器地址后，应用还会向这台服务器请求当天的 Garmin 活动摘要，用于「今天」页面（只发送日期）。服务器地址必须以 `https://` 开头：应用会拒绝 `http://` 地址，也不会向它发送任何内容，所以照片、餐食文字和服务器上传密钥都不会以未加密的方式传输。
+  <!-- depends: privacy (http:// refused everywhere: kRequireHttpsServer = true) -->
+
+所有请求都通过加密的 HTTPS 连接离开手机。
 
 **哪些照片会被发送：**
 
@@ -391,7 +422,7 @@ date. Questions: open an issue at
 **随文字请求一起发送的内容：**
 
 - *文字描述一餐*（例如「我吃了一碗面」）：你输入的文字和今天的日期，不发送其他餐食。
-- *修改或删除某餐*（例如「那碗面其实是烧鸭饭」或「删掉午饭」）：你输入的文字、今天的日期，以及最近 7 天餐食的描述、食物、日期、时间和热量估算，便于 AI 找到你指的那一餐。
+- *修改或删除某餐*（例如「那碗面其实是烧鸭饭」、「删掉午饭」、「我体重 72 公斤」或「跑 5 公里消耗了 450 千卡」；后两句会记录一次体重或一项活动）：你输入的文字、今天的日期，以及最近 7 天餐食的描述、食物、日期、时间和热量估算，便于 AI 找到你指的那一餐。
 
 设置中的连接检测只会访问所选服务（或你的服务器），发送一条固定的测试消息和一张内置的测试图片；如果你填写了饮食档案，它会随测试图片一起发送。不会发送你的任何照片或餐食。
 
@@ -405,7 +436,7 @@ date. Questions: open an issue at
 - **查询会发送的内容：** 最多三个来自这份内置列表的连锁店名称（在照片拍摄地点附近找到的连锁店，或照片里杯子、袋子、小票上印的品牌），食物名称及其份量和单位，国家代码（总是 US：不在美国吃的餐不会被查询）以及回复所用的语言。在附近找到的连锁店会显示你当时在它附近。
 - **查询绝不会发送的内容：** 照片本身、拍摄位置、城市、街道、与任何场所的距离、Apple 地图返回的任何内容、这一餐的时间或描述、你的饮食档案或饮食记录。
 - **由谁接收、由谁进行网页搜索：**
-  - **你自己的服务器：** 你的服务器，它在你的套餐下使用 Anthropic 的 Claude 网页搜索。根据照片位置找到的连锁店名称，只有在服务器地址以 `https://` 开头时才会发送给你的服务器；地址是 `http://` 时，只按印出的品牌查询。你的服务器会在内存中保留一次查询的请求和结果，最长 24 小时。使用你自己的服务器时，应用只会*建议*连锁店公布的数值：只有你采用后，这一餐才会改变。
+  - **你自己的服务器：** 你的服务器，它在你的套餐下使用 Anthropic 的 Claude 网页搜索。和其他内容一样，只有服务器地址以 `https://` 开头时，查询才会发送给你的服务器；`http://` 地址会被拒绝，也不会收到任何查询。你的服务器会在内存中保留一次查询的请求和结果，最长 24 小时。使用你自己的服务器时，应用只会*建议*连锁店公布的数值：只有你采用后，这一餐才会改变。
   - **Anthropic**（你的 API Key）：Anthropic，由它进行网页搜索。
   - **OpenRouter**（你的 API Key）：OpenRouter（它会把请求转交给你所选模型背后的公司）及其搜索合作方 Exa。
   - 其他任何 AI 服务：完全不会进行查询。
@@ -430,7 +461,8 @@ date. Questions: open an issue at
 ### 导出、导入与备份
 
 - 只有在你点击时才会导出或导入。导出的是一份记录文件（餐食、体重、身体围度、运动记录、活动、健身档案和已处理照片列表；不包含 API Key）和餐食图片（相机可能写入其中的数据会被删除），由你通过系统分享面板发送到你选择的地方。导入会把你选择的文件或粘贴的文字合并进手机。
-- 手机自身的备份可能包含应用数据：iPhone 上的 iCloud 或电脑备份，以及 Android 的系统备份（可能会在你自己的 Google 账户中保存一份副本）。上文说明不会进入备份的记录（Meta 眼镜记录和餐厅查询的文件）不在其中，也不在「iCloud 备份」里。
+- 手机自身的备份可能包含应用数据：iPhone 上的 iCloud 或电脑备份，以及 Android 的系统备份（可能会在你自己的 Google 账户中保存一份副本）。上文说明不会进入备份的记录（Meta 眼镜记录和餐厅查询的文件）不在其中，也不在「iCloud 备份」里。在 Android 上，API Key 和你自己服务器的上传密钥也不会进入 Android 的备份，也不会在换新手机时转移过去，所以恢复之后应用会请你重新填写。
+  <!-- depends: native (the flutter_secure_storage files excluded from cloud-backup, device-transfer and full-backup-content) -->
 
 ### 删除数据
 
@@ -459,4 +491,4 @@ date. Questions: open an issue at
 
 ### 变更与联系
 
-本政策的变更会发布在此文件中，并更新生效日期。如有问题，请在 <https://github.com/AkiyamaKunka/Chopstats/issues> 提交 issue。
+本政策的变更会发布在此文件中，并更新生效日期。如有问题，请见上文「我们是谁」，或在 <https://github.com/AkiyamaKunka/Chopstats/issues> 提交 issue。
