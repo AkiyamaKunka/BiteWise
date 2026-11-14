@@ -3350,6 +3350,18 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get discardChangesTitle => '放弃更改？';
+
+  @override
+  String get discardChangesBody => '你在这里的更改尚未保存。';
+
+  @override
+  String get discardChangesKeep => '继续编辑';
+
+  @override
+  String get discardChangesDiscard => '放弃';
+
+  @override
   String get summaryBatteryRestrictedHint => '电池使用受限 —— 每日总结无法送达。';
 
   @override

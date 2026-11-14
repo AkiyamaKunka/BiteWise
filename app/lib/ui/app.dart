@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart'
     show getApplicationDocumentsDirectory;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 
 import '../services/backup/backup_coordinator.dart';
 import '../services/photo/background_time.dart' show appEngineInForeground;
@@ -36,6 +37,7 @@ import 'screens/settings_screen.dart';
 import 'screens/today_screen.dart';
 import 'refresh_signal.dart';
 import 'services.dart';
+import 'widgets/grouped.dart' show ContentWidthCap;
 import 'widgets/restaurant_consent_sheet.dart';
 
 class _AppleScrollBehavior extends MaterialScrollBehavior {
@@ -47,6 +49,41 @@ class _AppleScrollBehavior extends MaterialScrollBehavior {
   Widget buildOverscrollIndicator(
           BuildContext context, Widget child, ScrollableDetails details) =>
       child;
+}
+
+/// Android's navigation bar styled for the theme the app SHOWS (Android
+/// push, 2026-11-13). MainActivity handles uiMode changes itself
+/// (AndroidManifest configChanges), so a light/dark switch while the app
+/// runs kept the launch theme's bar: with 3-button navigation, a light bar
+/// under the dark app and dark buttons on a dark bar after switching back
+/// (UX run screenshots 57-59). Only the navigation-bar fields are set; the
+/// status-bar ones stay null, so the app bars keep them. The bar takes the
+/// tab bar's own opaque colour (chrome), with the buttons in its contrast
+/// and the system's contrast scrim off. Not transparent: below Android 15
+/// the app does not draw under the bar, so a transparent one showed the
+/// window colour fixed at launch under buttons that followed the new theme
+/// (review 2026-11-13); Android 15+ draws edge to edge and ignores the
+/// colour. iPhone has no such bar: nothing is set there.
+class _SystemNavBarStyle extends StatelessWidget {
+  const _SystemNavBarStyle({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (theme.platform != TargetPlatform.android) return child;
+    final dark = theme.brightness == Brightness.dark;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        systemNavigationBarColor: context.colors.chrome,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness:
+            dark ? Brightness.light : Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: child,
+    );
+  }
 }
 
 class CalorieTrackerApp extends StatelessWidget {
@@ -93,6 +130,8 @@ class CalorieTrackerApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: const [Locale('en'), Locale('zh')],
+          builder: (context, child) =>
+              _SystemNavBarStyle(child: child ?? const SizedBox.shrink()),
           home: shell,
         );
     }
@@ -352,6 +391,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // One question at a time: the consent-update one answers first.
     await _consentUpdateAnswered();
     if (!mounted) return;
+    final settings = widget.services.settings;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -364,6 +404,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         // dialog names the company the server passes the data to.
         content: SingleChildScrollView(
           child: Text([
+            // Watch Camera Roll on: from the confirm on, every new library
+            // photo (non-food too) goes to this server. Said first, as the
+            // recipient-change dialog does (confirmAiRecipientChange).
+            if (settings.watcherEnabled)
+              ctx.l10n.watcherDisclosureBody(
+                  providerDisplayLabel(ctx.l10n, 'server', link.backend),
+                  settings.lookbackDays.clamp(1, 30)),
             ctx.l10n.setupLinkBody(
                 link.server,
                 providerDisplayLabel(ctx.l10n, 'server', link.backend),
@@ -390,7 +437,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       ),
     );
     if (ok != true || !mounted) return;
-    final s = widget.services.settings;
+    final s = settings;
     // The confirmation named the plan's AI company: it is the consent for
     // that recipient, saved before anything can be sent to it.
     await s.setAiConsent(aiConsentRoute('server', link.backend),
@@ -567,55 +614,58 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final s = widget.services;
     final shell = Scaffold(
       // No shared AppBar: each tab renders its own iOS-style large title
-      // that collapses as it scrolls (SliverAppBar.large).
-      body: IndexedStack(
-        index: _index,
-        children: _onlySelectedRebuilds([
-          TodayScreen(
-              key: _todayKey,
-              dao: s.dao,
-              thumbs: s.thumbs,
-              garminDaily: s.garminDaily,
-              mealInUse: s.mealInUse,
-              restaurantAssist: s.restaurantAssist,
+      // that collapses as it scrolls (SliverAppBar.large). A centred
+      // column on tablets, foldables and Chromebooks (ContentWidthCap).
+      body: ContentWidthCap(
+        child: IndexedStack(
+          index: _index,
+          children: _onlySelectedRebuilds([
+            TodayScreen(
+                key: _todayKey,
+                dao: s.dao,
+                thumbs: s.thumbs,
+                garminDaily: s.garminDaily,
+                mealInUse: s.mealInUse,
+                restaurantAssist: s.restaurantAssist,
+                settings: s.settings,
+                usual: s.usualFoods),
+            HistoryScreen(
+                key: _historyKey,
+                dao: s.dao,
+                thumbs: s.thumbs,
+                mealInUse: s.mealInUse,
+                restaurantAssist: s.restaurantAssist,
+                settings: s.settings),
+            BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
+            SettingsScreen(
               settings: s.settings,
-              usual: s.usualFoods),
-          HistoryScreen(
-              key: _historyKey,
+              analyzer: s.analyzer,
               dao: s.dao,
-              thumbs: s.thumbs,
-              mealInUse: s.mealInUse,
+              requestPhotoPermission: s.requestPhotoPermission,
+              photoIntake: s.photoIntake,
+              coverage: s.coverage,
+              processPhoto: s.processPhoto,
+              photoLibrary: s.photoLibrary,
+              startClaudeAuth: s.startClaudeAuth,
+              completeClaudeAuth: s.completeClaudeAuth,
+              serverLoginState: s.serverLoginState,
+              openSystemSettings: s.openSystemSettings,
+              notificationsEnabled: s.notificationsEnabled,
+              nextSummaryAt: s.nextSummaryAt,
+              lastBackgroundScan: s.lastBackgroundScan,
+              backgroundRefreshEnabled: s.backgroundRefreshEnabled,
+              backgroundScanStuck: s.backgroundScanStuck,
+              changes: s.settingsChanges,
               restaurantAssist: s.restaurantAssist,
-              settings: s.settings),
-          BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
-          SettingsScreen(
-            settings: s.settings,
-            analyzer: s.analyzer,
-            dao: s.dao,
-            requestPhotoPermission: s.requestPhotoPermission,
-            photoIntake: s.photoIntake,
-            coverage: s.coverage,
-            processPhoto: s.processPhoto,
-            photoLibrary: s.photoLibrary,
-            startClaudeAuth: s.startClaudeAuth,
-            completeClaudeAuth: s.completeClaudeAuth,
-            serverLoginState: s.serverLoginState,
-            openSystemSettings: s.openSystemSettings,
-            notificationsEnabled: s.notificationsEnabled,
-            nextSummaryAt: s.nextSummaryAt,
-            lastBackgroundScan: s.lastBackgroundScan,
-            backgroundRefreshEnabled: s.backgroundRefreshEnabled,
-            backgroundScanStuck: s.backgroundScanStuck,
-            changes: s.settingsChanges,
-            restaurantAssist: s.restaurantAssist,
-            cloudBackup: s.cloudBackup,
-            androidBackupNote: Platform.isAndroid,
-            onImported: () {
-              s.thumbs?.clear();
-              signalMealsChanged();
-            },
-          ),
-        ]),
+              cloudBackup: s.cloudBackup,
+              androidBackupNote: Platform.isAndroid,
+              onImported: () {
+                s.thumbs?.clear();
+                signalMealsChanged();
+              },
+            ),
+          ]),
+        ),
       ),
       // The + 记录 button is a REAL Scaffold FAB (Today tab only — Body has
       // its own), so Material lifts it above this messenger's snackbars.
@@ -785,6 +835,8 @@ class _StartupErrorAppState extends State<StartupErrorApp>
       theme: AppTheme.build(Brightness.light, cjk: zh),
       darkTheme: AppTheme.build(Brightness.dark, cjk: zh),
       themeMode: ThemeMode.system,
+      builder: (context, child) =>
+          _SystemNavBarStyle(child: child ?? const SizedBox.shrink()),
       home: Builder(builder: (context) {
         final text = Theme.of(context).textTheme;
         final colors = context.colors;

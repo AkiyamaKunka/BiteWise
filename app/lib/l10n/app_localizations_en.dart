@@ -3725,6 +3725,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get discardChangesTitle => 'Discard changes?';
+
+  @override
+  String get discardChangesBody => 'What you changed here has not been saved.';
+
+  @override
+  String get discardChangesKeep => 'Keep editing';
+
+  @override
+  String get discardChangesDiscard => 'Discard';
+
+  @override
   String get summaryBatteryRestrictedHint =>
       'Battery use is Restricted — the daily summary can\'t be delivered.';
 

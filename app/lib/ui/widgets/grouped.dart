@@ -502,8 +502,49 @@ class GroupedToggleRow extends StatelessWidget {
   }
 }
 
+/// From this window width the content is capped ([ContentWidthCap]).
+const double kWideLayoutMinWidth = 600;
+
+/// The content column's width on a wide window.
+const double kContentMaxWidth = 640;
+
+/// Large screens (Android push, 2026-11-13): for targetSdk 36, Android 16
+/// ignores orientation and resizability limits at 600 dp and wider, so
+/// tablets, foldables and Chromebooks get the app whatever the manifest
+/// says, and an 800 dp window stretched every card edge to edge (UX run
+/// screenshot 62). From [kWideLayoutMinWidth] [child] is a centred column
+/// at most [kContentMaxWidth] wide; below it, the full width as before.
+/// The side insets are kept clear too: in landscape with 3-button
+/// navigation the cards ran under the side bar (screenshot 73). The page
+/// colour shows on either side (it is every scaffold's background).
+///
+/// The same widgets at every width, so crossing the breakpoint (unfolding,
+/// a resized window) keeps [child]'s state.
+class ContentWidthCap extends StatelessWidget {
+  const ContentWidthCap({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= kWideLayoutMinWidth;
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxWidth: wide ? kContentMaxWidth : double.infinity),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 /// Scaffold for a grouped subpage (the disclosure targets): grouped
-/// background + iOS-style large-title collapsing header.
+/// background + iOS-style large-title collapsing header. On a wide window
+/// the page is a centred column ([ContentWidthCap]).
 class GroupedPage extends StatelessWidget {
   const GroupedPage({super.key, required this.title, required this.children});
   final String title;
@@ -513,18 +554,20 @@ class GroupedPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: pageColor(context),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics()),
-        slivers: [
-          appLargeTitleBar(context, title: title),
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [...children, const SizedBox(height: 32)],
+      body: ContentWidthCap(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            appLargeTitleBar(context, title: title),
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [...children, const SizedBox(height: 32)],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -597,18 +640,85 @@ Future<T?> showGroupedSheet<T>(
       ),
     );
 
+/// A sheet's drag handle that closes the sheet through
+/// Navigator.maybePop, so a PopScope inside it (DiscardChangesGuard) asks
+/// first. Material's own handle and drag-to-dismiss pop the sheet with
+/// Navigator.pop, past any PopScope: 72.5 typed in the Body log sheet, a
+/// fling down, and it was gone (review 2026-11-13). For a sheet opened with
+/// `enableDrag: false, showDragHandle: false`: it looks like the theme's
+/// handle (the same 48-pt strip), a drag down past [_closeDistance] or a
+/// downward fling closes, and a screen reader's Dismiss does the same. The
+/// sheet itself does not follow the finger.
+class SheetDragHandle extends StatefulWidget {
+  const SheetDragHandle({super.key});
+
+  @override
+  State<SheetDragHandle> createState() => _SheetDragHandleState();
+}
+
+class _SheetDragHandleState extends State<SheetDragHandle> {
+  static const double _closeDistance = 24;
+  static const double _closeVelocity = 700; // Material's sheet fling
+  double _dragged = 0;
+
+  void _close() => Navigator.maybePop(context);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final size = theme.bottomSheetTheme.dragHandleSize ?? const Size(32, 4);
+    final color = theme.bottomSheetTheme.dragHandleColor ??
+        theme.colorScheme.onSurfaceVariant;
+    return Semantics(
+      key: const Key('sheetDragHandle'),
+      label: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      container: true,
+      onTap: _close,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        excludeFromSemantics: true,
+        onVerticalDragStart: (_) => _dragged = 0,
+        onVerticalDragUpdate: (d) => _dragged += d.delta.dy,
+        onVerticalDragEnd: (d) {
+          if (_dragged > _closeDistance ||
+              (d.primaryVelocity ?? 0) > _closeVelocity) {
+            _close();
+          }
+        },
+        child: SizedBox(
+          height: kMinInteractiveDimension,
+          child: Center(
+            child: Container(
+              width: size.width,
+              height: size.height,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(size.height / 2),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// The body of a grouped sheet (see [showGroupedSheet]). [children] see
 /// the in-sheet colours ([AppColors.inSheet]), so GroupedSection and
-/// GroupedCard draw sheet cells inside it.
+/// GroupedCard draw sheet cells inside it. [dragHandle] draws a
+/// [SheetDragHandle] above the scrolling content, for a sheet opened
+/// without Material's own handle.
 class GroupedSheet extends StatelessWidget {
   const GroupedSheet({
     super.key,
     this.title,
     this.subtitle,
+    this.dragHandle = false,
     required this.children,
   });
   final String? title;
   final String? subtitle;
+  final bool dragHandle;
   final List<Widget> children;
 
   @override
@@ -617,48 +727,58 @@ class GroupedSheet extends StatelessWidget {
     final colors = AppColors.of(context);
     final type = AppTypography.of(context);
     final inSheet = colors.inSheet();
+    final scroll = SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Semantics(
+                header: true,
+                child: Text(title!,
+                    style: type.title2.copyWith(color: colors.label)),
+              ),
+            ),
+          if (subtitle != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(subtitle!,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: colors.secondaryLabel)),
+            ),
+          Theme(
+            data: theme.copyWith(extensions: [
+              ...theme.extensions.values
+                  .where((e) => e is! AppColors),
+              inSheet,
+            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
     return Padding(
       // The keyboard: the sheet's content rises above it.
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: SafeArea(
         top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (title != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                  child: Semantics(
-                    header: true,
-                    child: Text(title!,
-                        style: type.title2.copyWith(color: colors.label)),
-                  ),
-                ),
-              if (subtitle != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                  child: Text(subtitle!,
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(color: colors.secondaryLabel)),
-                ),
-              Theme(
-                data: theme.copyWith(extensions: [
-                  ...theme.extensions.values
-                      .where((e) => e is! AppColors),
-                  inSheet,
-                ]),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: children,
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
+        child: dragHandle
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SheetDragHandle(),
+                  Flexible(child: scroll),
+                ],
+              )
+            : scroll,
       ),
     );
   }

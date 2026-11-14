@@ -1004,8 +1004,9 @@ void main() {
     await tester.tap(find.byKey(const Key('addMealToDay')));
     await tester.pumpAndSettle();
     expect(find.text('Add meal'), findsOneWidget);
-    // The new meal defaults to the day being viewed, not today.
-    expect(find.widgetWithText(OutlinedButton, '2026-07-19'), findsOneWidget);
+    // The new meal defaults to the day being viewed, not today (the pill
+    // reads it as a date since the Android push: 'Jul 19', not ISO).
+    expect(find.widgetWithText(OutlinedButton, 'Jul 19'), findsOneWidget);
   });
 
   testWidgets('the date picker ends TOMORROW by the calendar, also in the '

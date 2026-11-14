@@ -5621,6 +5621,30 @@ abstract class AppLocalizations {
   /// **'This photo was taken on {taken}, more than {days} days ago, so its meal was logged for today. To log it on its own day, open the meal and change its date.'**
   String addOldPhotoLoggedToday(String taken, int days);
 
+  /// Android push (ui lane): asked when back (gesture, button, app-bar back or a tap outside a sheet) would close Edit meal, Fix meals or the Body log sheet with unsaved typing.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes?'**
+  String get discardChangesTitle;
+
+  /// Discard-changes dialog body, under discardChangesTitle: why the question is asked. The typing is kept on Keep editing, dropped on Discard.
+  ///
+  /// In en, this message translates to:
+  /// **'What you changed here has not been saved.'**
+  String get discardChangesBody;
+
+  /// Discard-changes dialog: stays on the screen with the typing kept.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep editing'**
+  String get discardChangesKeep;
+
+  /// Discard-changes dialog: closes the screen and drops the unsaved typing (destructive style).
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discardChangesDiscard;
+
   /// Settings › Daily summary, Android only: red hint shown while the summary is on and the app's battery usage is set to Restricted (App info › App battery usage), under which Android fires none of the app's alarms, the summary's included. Followed by the 'Open system settings' button. Worded like notificationsOffHint.
   ///
   /// In en, this message translates to:

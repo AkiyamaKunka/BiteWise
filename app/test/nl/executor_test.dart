@@ -678,7 +678,7 @@ void main() {
         'analysis': {'is_food': true, 'meal_description': '小米粥', 'total_calories': 120},
       }, 'fix the porridge', await dao.recentMeals());
       expect(dao.updates.single.$1, olderId);
-      expect(replies.single.text, contains('📅 2026-07-15 08:00 AM'));
+      expect(replies.single.text, contains('📅 2026-07-15 8:00 AM'));
       expect(replies.single.text, isNot(contains('2026-07-17')));
     });
   });
@@ -696,7 +696,7 @@ void main() {
       final r = replies.single;
       expect(r.needsDeleteConfirmation, isTrue);
       expect(r.pendingDeleteIds, [breakfastId]);
-      expect(r.pendingDeleteLabels.single, '白粥 (2026-07-17 08:00 AM, ~150 kcal)');
+      expect(r.pendingDeleteLabels.single, '白粥 (2026-07-17 8:00 AM, ~150 kcal)');
       expect(r.text, contains('Delete 1 meal(s)?'));
       expect(r.text, contains('This cannot be undone.'));
       expect(dao.meals, hasLength(3)); // NOTHING deleted yet

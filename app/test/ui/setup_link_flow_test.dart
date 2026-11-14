@@ -7,7 +7,11 @@ import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/core/setup_link.dart'
     show setupLinkRepeatWindow;
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/app.dart';
+import 'package:calorie_tracker/ui/provider_names.dart'
+    show providerDisplayLabel;
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -264,5 +268,108 @@ void main() {
     expect(find.text('That setup link is not valid.'), findsNothing);
     expect(find.byKey(const Key('setupLinkConfirm')), findsNothing);
     expect(settings.apiKey, 'old');
+  });
+
+  // Android push (ui lane, sweep C12): confirming a link while Watch
+  // Camera Roll is on sends every new library photo, non-food included, to
+  // the new server from then on, yet the dialog never said so (the
+  // recipient-change dialog does). Every case above has the watcher off.
+  group('with Watch Camera Roll on', () {
+    (UiServices, FakeSettings, StreamController<Uri>) watching(
+        {int lookbackDays = 3}) {
+      final settings = FakeSettings(
+          apiKey: 'old', watcherEnabled: true, lookbackDays: lookbackDays);
+      final links = StreamController<Uri>.broadcast();
+      return (
+        UiServices(
+          dao: FakeDao(),
+          analyzer: FakeAnalyzer(),
+          executor: FakeExecutor(),
+          settings: settings,
+          picker: FakePicker(),
+          requestPhotoPermission: () async => true,
+          setupLinks: links.stream,
+        ),
+        settings,
+        links,
+      );
+    }
+
+    // The dialog's body: the one text that shows the masked key.
+    String dialogText(WidgetTester tester) => tester
+        .widgetList<Text>(find.descendant(
+            of: find.byType(AlertDialog), matching: find.byType(Text)))
+        .map((t) => t.data ?? '')
+        .singleWhere((t) => t.contains('••••'));
+
+    testWidgets('the camera-roll notice leads, as in the recipient-change '
+        'dialog', (tester) async {
+      final (services, settings, links) = watching();
+      await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+      links.add(good);
+      await tester.pumpAndSettle();
+      final l = AppLocalizationsEn();
+      final notice = l.watcherDisclosureBody(
+          providerDisplayLabel(l, 'server', 'claude'), 3);
+      final text = dialogText(tester);
+      expect(text, startsWith(notice));
+      expect(text.indexOf(notice), lessThan(text.indexOf('Server: ')));
+      expect(text, contains(l.setupLinkSharing(
+          l.aiConsentPlanCompany('claude'))));
+
+      await tester.tap(find.byKey(const Key('setupLinkConfirm')));
+      await tester.pumpAndSettle();
+      expect(settings.provider, 'server');
+      expect(settings.watcherEnabled, isTrue);
+      await links.close();
+    });
+
+    testWidgets('zh: the notice names the plan as Settings does',
+        (tester) async {
+      final (services, _, links) = watching(lookbackDays: 45);
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: HomeShell(services: services),
+      ));
+      links.add(Uri.parse('bitewise://setup?server=https%3A%2F%2Fmy.example'
+          '&key=$key&backend=glm'));
+      await tester.pumpAndSettle();
+      final l = AppLocalizationsZh();
+      // The lookback is clamped to 30 days, as the switch's notice is.
+      expect(
+          dialogText(tester),
+          startsWith(l.watcherDisclosureBody(
+              providerDisplayLabel(l, 'server', 'glm'), 30)));
+      await links.close();
+    });
+
+    testWidgets('cancel still changes nothing', (tester) async {
+      final (services, settings, links) = watching();
+      await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+      links.add(good);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(settings.apiKey, 'old');
+      expect(settings.provider, isNot('server'));
+      await links.close();
+    });
+  });
+
+  testWidgets('with the watcher off there is no camera-roll notice',
+      (tester) async {
+    final (services, _, links) = rig();
+    await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+    links.add(good);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byType(AlertDialog),
+            matching: find.textContaining('Watch Camera Roll')),
+        findsNothing);
+    await links.close();
   });
 }
