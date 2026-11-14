@@ -5039,10 +5039,10 @@ abstract class AppLocalizations {
   /// **'Nothing is being copied to iCloud Drive, so your meals would not come back after a reinstall, or on a new iPhone that does not get this iPhone\'s data from a backup or a transfer. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
   String get backupICloudFooterOff;
 
-  /// Footer of Settings › Your Data on Android (there is no automatic backup file on Android).
+  /// Footer of Settings › Your Data on Android (there is no automatic backup file on Android): Android's own Auto Backup can restore the log from the Google account but never the keys (the key store is excluded and cannot be read on another phone), and Export Data › Save to Device… is how to move phones.
   ///
   /// In en, this message translates to:
-  /// **'Android\'s own backup can keep this app\'s data in your Google account. Before you change phones, export a file and import it on the new phone. Import merges: meals already here are left alone.'**
+  /// **'Android\'s own backup can keep your food log in your Google account, but not your API keys or server upload key: on a new phone you enter them again. To move to a new phone, use Export Data, then Save to Device, and import that file on the new phone. Import merges: meals already here are left alone.'**
   String get backupAndroidFooter;
 
   /// Status line under the iCloud Backup switch: the user turned it off.
@@ -5560,6 +5560,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The export could not be saved. Try Share… instead.'**
   String get exportSaveFailed;
+
+  /// Settings › Your Data, both platforms: a line under the section. Google Play's Health Content and Services policy asks apps to remind users to consult a healthcare professional; the full not-a-medical-device disclaimer is in the store description.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats is not medical advice. For decisions about your health or diet, consult a healthcare professional.'**
+  String get settingsHealthReminder;
 }
 
 class _AppLocalizationsDelegate

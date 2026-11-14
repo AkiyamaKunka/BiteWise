@@ -509,13 +509,31 @@ class _DataSectionState extends State<DataSection> {
 
   /// Export and import — the food log is the user's — and on iPhone the
   /// iCloud Backup rows above them.
+  ///
+  /// Under them, on both platforms, the health reminder: Google Play's
+  /// Health Content and Services policy asks apps to remind users to
+  /// consult a healthcare professional (the full not-a-medical-device
+  /// disclaimer is in the store description).
   @override
   Widget build(BuildContext context) {
     final backup = widget.backup;
-    if (backup == null) return _section(context, null);
-    return ValueListenableBuilder<BackupStatus>(
-      valueListenable: backup.status,
-      builder: (context, status, _) => _section(context, status),
+    final section = backup == null
+        ? _section(context, null)
+        : ValueListenableBuilder<BackupStatus>(
+            valueListenable: backup.status,
+            builder: (context, status, _) => _section(context, status),
+          );
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        section,
+        GroupedSection(
+          key: const Key('healthReminder'),
+          footer: context.l10n.settingsHealthReminder,
+          children: const [],
+        ),
+      ],
     );
   }
 

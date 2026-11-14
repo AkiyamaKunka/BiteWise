@@ -3281,7 +3281,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupAndroidFooter =>
-      'Android\'s own backup can keep this app\'s data in your Google account. Before you change phones, export a file and import it on the new phone. Import merges: meals already here are left alone.';
+      'Android\'s own backup can keep your food log in your Google account, but not your API keys or server upload key: on a new phone you enter them again. To move to a new phone, use Export Data, then Save to Device, and import that file on the new phone. Import merges: meals already here are left alone.';
 
   @override
   String get backupStatusOff => 'Off';
@@ -3682,4 +3682,8 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get exportSaveFailed =>
       'The export could not be saved. Try Share… instead.';
+
+  @override
+  String get settingsHealthReminder =>
+      'Chopstats is not medical advice. For decisions about your health or diet, consult a healthcare professional.';
 }

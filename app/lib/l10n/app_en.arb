@@ -3082,9 +3082,9 @@
   "@backupICloudFooterOff": {
     "description": "Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, iCloud Drive is not available for the app, or backups are blocked (another iPhone's backup, a file changed outside the app or unreadable) or paused (the backup gone from iCloud, a much smaller record): nothing is copied, so it says to export a file before reinstalling or changing phones."
   },
-  "backupAndroidFooter": "Android's own backup can keep this app's data in your Google account. Before you change phones, export a file and import it on the new phone. Import merges: meals already here are left alone.",
+  "backupAndroidFooter": "Android's own backup can keep your food log in your Google account, but not your API keys or server upload key: on a new phone you enter them again. To move to a new phone, use Export Data, then Save to Device, and import that file on the new phone. Import merges: meals already here are left alone.",
   "@backupAndroidFooter": {
-    "description": "Footer of Settings › Your Data on Android (there is no automatic backup file on Android)."
+    "description": "Footer of Settings › Your Data on Android (there is no automatic backup file on Android): Android's own Auto Backup can restore the log from the Google account but never the keys (the key store is excluded and cannot be read on another phone), and Export Data › Save to Device… is how to move phones."
   },
   "backupStatusOff": "Off",
   "@backupStatusOff": {
@@ -3511,5 +3511,9 @@
   "exportSaveFailed": "The export could not be saved. Try Share… instead.",
   "@exportSaveFailed": {
     "description": "Snackbar: Save to Device… could not write the file (the folder refused it, the disk is full, or the system screen could not run)."
+  },
+  "settingsHealthReminder": "Chopstats is not medical advice. For decisions about your health or diet, consult a healthcare professional.",
+  "@settingsHealthReminder": {
+    "description": "Settings › Your Data, both platforms: a line under the section. Google Play's Health Content and Services policy asks apps to remind users to consult a healthcare professional; the full not-a-medical-device disclaimer is in the store description."
   }
 }
