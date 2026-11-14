@@ -93,6 +93,9 @@ class AppServices {
     if (_instance != null) return _instance!;
 
     final settings = await AppSettings.load();
+    // Android: an install from before in-context asking counts as asked —
+    // read before anything this launch writes (notification_permission).
+    await settleNotificationAskAtLaunch();
     final MealsDao dao = await createMealsDao();
     // Any 'processing' ledger row at launch is a crashed run — reclaim it
     // before services start (spec §2.3 single-process simplification).

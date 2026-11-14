@@ -1459,6 +1459,15 @@ void planTuningTests() {
       testWidgets('never asked → "Allow notifications" shows the dialog; '
           'then the button opens the notification settings', (tester) async {
         _tallView(tester);
+        // Android's dialog takes the focus while it is up.
+        debugRequestNotificationPermission = () async {
+          requests++;
+          tester.binding
+              .handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+          tester.binding
+              .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+          return false;
+        };
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
             .setMockMethodCallHandler(backgroundRestrictionChannel,
                 (call) async {
@@ -1479,6 +1488,28 @@ void planTuningTests() {
         expect(requests, 1, reason: 'never a second dialog');
         expect(nativeCalls, ['openNotificationSettings']);
         expect(opened, 0, reason: 'the notification page, not App info');
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+      // Review (finding 8): Android 12 and older has no dialog, and a
+      // denial Android no longer asks about shows none: the first tap
+      // used to do nothing.
+      testWidgets('never asked, and no dialog comes up: the first tap opens '
+          'the notification settings', (tester) async {
+        _tallView(tester);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(backgroundRestrictionChannel,
+                (call) async {
+          nativeCalls.add(call.method);
+          return true;
+        });
+        await tester.pumpWidget(
+            screen(enabled: () async => false, open: () async {}));
+        await tester.pumpAndSettle();
+        expect(find.text('Allow notifications'), findsOneWidget);
+        await tapRemedy(tester);
+        expect(requests, 1);
+        expect(nativeCalls, ['openNotificationSettings']);
+        expect(find.text('Open system settings'), findsOneWidget);
       }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
       testWidgets('an older native build falls back to App info',

@@ -11,6 +11,7 @@ import 'package:calorie_tracker/services/photo/background_restriction.dart'
 import 'package:calorie_tracker/services/report/notification_permission.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -76,26 +77,113 @@ void main() {
   test('never on iOS (it asks during init, as before)', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     expect(await askNotificationPermissionOnce(), isNull);
-    await fixNotificationsOff(fallback: () async {});
+    var settingsOpened = 0;
+    await fixNotificationsOff(fallback: () async => settingsOpened++);
+    expect(settingsOpened, 1, reason: 'iOS: system settings, as before');
     expect(requests, 0);
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getBool(notificationPermissionAskedPrefsKey), isNull);
   });
 
-  test('a failing request is not a throw', () async {
+  test('a failing request is not a throw, and does not use up the one ask',
+      () async {
     debugRequestNotificationPermission =
         () async => throw PlatformException(code: 'no activity');
     expect(await askNotificationPermissionOnce(), isNull);
+    expect(await notificationPermissionAsked(), isFalse,
+        reason: 'no request ran');
+    debugRequestNotificationPermission = () async {
+      requests++;
+      return true;
+    };
+    expect(await askNotificationPermissionOnce(), isTrue);
+    expect(requests, 1);
+    expect(await notificationPermissionAsked(), isTrue);
+  });
+
+  // Review (finding 8): main asked at every start, so an upgrader has
+  // answered already — maybe twice, which Android makes permanent.
+  group('an install from before this scheme counts as asked', () {
+    test('preferences an earlier version left: asked, once per install',
+        () async {
+      SharedPreferences.setMockInitialValues(
+          {'settings.report_time': '21:30', 'background.last_run_iso': 'x'});
+      await settleNotificationAskAtLaunch();
+      expect(await notificationPermissionAsked(), isTrue);
+      expect(await askNotificationPermissionOnce(), isNull);
+      expect(requests, 0, reason: 'a trigger asks nothing');
+    });
+
+    test('a fresh install (nothing stored at its first launch): not asked, '
+        'and still not at its second launch', () async {
+      SharedPreferences.setMockInitialValues({});
+      await settleNotificationAskAtLaunch();
+      expect(await notificationPermissionAsked(), isFalse);
+      // The first launch wrote settings; the second must not read them as
+      // an earlier version's.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('settings.report_time', '21:30');
+      await settleNotificationAskAtLaunch();
+      expect(await notificationPermissionAsked(), isFalse);
+      expect(await askNotificationPermissionOnce(), isFalse);
+      expect(requests, 1);
+    });
+
+    test('never in a background run, never on iOS', () async {
+      SharedPreferences.setMockInitialValues({'settings.report_time': 'x'});
+      isHeadlessEngine = true;
+      await settleNotificationAskAtLaunch();
+      isHeadlessEngine = false;
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      await settleNotificationAskAtLaunch();
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool(notificationAskSchemePrefsKey), isNull);
+    });
   });
 
   group('fixNotificationsOff (Settings\' notifications-off row)', () {
+    /// A request during which Android's dialog comes up: the app loses
+    /// focus, then gets it back.
+    Future<bool?> withDialog(bool answer) async {
+      requests++;
+      final binding = TestWidgetsFlutterBinding.instance;
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      return answer;
+    }
+
+    setUp(() => TestWidgetsFlutterBinding.instance
+        .handleAppLifecycleStateChanged(AppLifecycleState.resumed));
+
     test('never asked → the system dialog, not a settings page', () async {
+      debugRequestNotificationPermission = () => withDialog(false);
       var fallbacks = 0;
       nativeAnswers((_) => true);
       await fixNotificationsOff(fallback: () async => fallbacks++);
       expect(requests, 1);
-      expect(channelCalls, isEmpty);
+      expect(channelCalls, isEmpty, reason: 'the user answered the dialog');
       expect(fallbacks, 0);
+    });
+
+    test('never asked, but no dialog comes up (Android 12 and older, or a '
+        'denial Android no longer asks about) → the settings page', () async {
+      nativeAnswers((_) => true);
+      await fixNotificationsOff(fallback: () async {});
+      expect(requests, 1, reason: 'the request ran: the ask is used');
+      expect(channelCalls, ['openNotificationSettings'],
+          reason: 'the first tap must do something');
+      expect(await notificationPermissionAsked(), isTrue);
+    });
+
+    test('never asked, and the request fails → the settings page, and the '
+        'ask is not used up', () async {
+      debugRequestNotificationPermission =
+          () async => throw PlatformException(code: 'no activity');
+      nativeAnswers((_) => true);
+      await fixNotificationsOff(fallback: () async {});
+      expect(channelCalls, ['openNotificationSettings']);
+      expect(await notificationPermissionAsked(), isFalse);
     });
 
     test('asked → the app\'s notification settings page', () async {

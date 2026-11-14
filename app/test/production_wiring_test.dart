@@ -787,8 +787,20 @@ void main() {
           r'unawaited\(askNotificationPermissionOnce\(\)\);',
         ),
       );
+      // An upgrader counts as asked: settled right after the settings
+      // load, before anything this launch writes preferences
+      // (notification_permission_test covers what it decides).
+      expect(
+        init,
+        _wired(
+          r'final settings = await AppSettings\.load\(\);\s*'
+          r'(//[^\n]*\n\s*)*await settleNotificationAskAtLaunch\(\);\s*'
+          r'final MealsDao dao = await createMealsDao\(\);',
+        ),
+      );
       final glue = _source('lib/ui/background_glue.dart');
       expect(glue, isNot(contains('askNotificationPermissionOnce')));
+      expect(glue, isNot(contains('settleNotificationAskAtLaunch')));
       expect(glue, isNot(contains('requestNotificationsPermission')));
       expect(_source('lib/services/report/notifications.dart'),
           isNot(contains('requestNotificationsPermission')),
