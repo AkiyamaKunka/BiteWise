@@ -451,6 +451,8 @@ void main() {
     late Map<String, Uint8List> held;
     late List<String> reads;
 
+    // Android's intake: copies in the share folder, each with a path of
+    // its own, may wait there for their turn.
     ShareIntake counting(FakeShareSource source) => ShareIntake(
         source: source,
         library: FakePhotoLibrary(),
@@ -459,6 +461,7 @@ void main() {
           return held[path];
         },
         cleanup: (path) async => cleaned.add(path),
+        sharedFolder: () async => '/shared',
         clock: () => now);
 
     List<String> share(int n, {String prefix = 'IMG'}) => [
@@ -549,6 +552,7 @@ void main() {
             return held[path];
           },
           cleanup: (path) async => cleaned.add(path),
+          sharedFolder: () async => '/shared',
           clock: () => now);
       final emitted = <String>[];
       final sub = intake.photos().listen((p) => emitted.add(p.fileName));
@@ -560,6 +564,35 @@ void main() {
       expect(emitted,
           [fileBaseName(paths[0]), fileBaseName(paths[2]), 'later_0.jpg']);
       expect(cleaned, [...paths, ...later]);
+      await sub.cancel();
+    });
+
+    test('iOS (no share folder) reads each copy as it arrives, paused or '
+        'not: its extension reuses file names', () async {
+      final source = FakeShareSource();
+      final paths = share(4);
+      final intake = ShareIntake(
+          source: source,
+          library: FakePhotoLibrary(),
+          readBytes: (path) async {
+            reads.add(path);
+            return held[path];
+          },
+          cleanup: (path) async => cleaned.add(path),
+          clock: () => now);
+      final emitted = <String>[];
+      late StreamSubscription<IntakePhoto> sub;
+      sub = intake.photos().listen((p) {
+        emitted.add(p.fileName);
+        sub.pause();
+      });
+      source.controller.add(paths);
+      await pumpEventQueue();
+      expect(reads, paths);
+      expect(cleaned, paths);
+      expect(emitted, hasLength(1), reason: 'the rest are buffered');
+      sub.resume();
+      await pumpEventQueue();
       await sub.cancel();
     });
 

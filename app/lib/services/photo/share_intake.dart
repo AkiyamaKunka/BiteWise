@@ -166,6 +166,10 @@ class ShareIntake {
   /// [androidSharedPhotoFolder]); null: any path (iOS, where the share
   /// extension writes the copies, and tests).
   final Future<String> Function()? _sharedFolder;
+
+  /// Whether a copy may wait on disk for its turn: only where every copy
+  /// has a path of its own (Android's share folder). See [photos].
+  bool get _copiesWait => _sharedFolder != null;
   final SharedMediaSource _source;
   final PhotoLibrary _library;
   final FileBytesReader _readBytes;
@@ -177,13 +181,21 @@ class ShareIntake {
   /// (Explicit controller, not async*: an async* generator parked on the
   /// live-share stream would defer subscription cancellation forever.)
   ///
-  /// BACKPRESSURE (review 171, C2): a copy is read only while the listener
-  /// is not paused. The pipeline pauses the stream until each photo's turn
-  /// ends (PhotoPipeline.bindStream), and the consent gate while it asks,
-  /// so a 40-photo share holds one original in memory, plus at most one
-  /// read ahead — not all 40 (about 160 MB) in the stream's buffer. The
-  /// copies wait in the share folder meanwhile. Batches are read one after
-  /// another, in order.
+  /// BACKPRESSURE (review 171, C2), Android: a copy is read only while the
+  /// listener is not paused. The pipeline pauses the stream until each
+  /// photo's turn ends (PhotoPipeline.bindStream), and the consent gate
+  /// while it asks, so a 40-photo share holds one original in memory, plus
+  /// at most one read ahead — not all 40 (about 160 MB) in the stream's
+  /// buffer. The copies wait in the share folder meanwhile, each in a
+  /// folder of its own (MainActivity). Batches are read one after another,
+  /// in order.
+  ///
+  /// iOS reads each copy the moment it arrives, as before: the share
+  /// extension writes `<appGroup>/<file name>` and replaces a file of the
+  /// same name (FullSizeRender.jpg for every edited photo, TempImage.png
+  /// for every in-memory image), so a copy left waiting was overwritten by
+  /// the next share of that name — two shares, one meal (review
+  /// 2026-11-13). iOS shares one image at a time: one original per share.
   Stream<IntakePhoto> photos() {
     late final StreamController<IntakePhoto> controller;
     StreamSubscription<List<String>>? liveSub;
@@ -199,7 +211,7 @@ class ShareIntake {
 
     Future<void> emitPaths(List<String> paths) async {
       for (final path in paths) {
-        while (controller.isPaused && !cancelled) {
+        while (_copiesWait && controller.isPaused && !cancelled) {
           await (resumed ??= Completer<void>()).future;
         }
         if (cancelled || controller.isClosed) {
