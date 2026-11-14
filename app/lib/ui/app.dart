@@ -251,8 +251,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   /// The share gate's question: true = allowed (and saved). Not now says
   /// that the shared photo was not analyzed.
-  Future<bool> _askShareConsent() async {
-    if (!mounted) return false;
+  /// Null: no dialog could be shown (this shell is going away), which is
+  /// no answer: the gate waits for the next shell (SharedPhotoConsentGate).
+  Future<bool?> _askShareConsent() async {
+    if (!mounted) return null;
     final gate = widget.services.sharedPhotoConsent;
     // One question per share: Not now covers the photos already in
     // (askSharedPhotoConsent).

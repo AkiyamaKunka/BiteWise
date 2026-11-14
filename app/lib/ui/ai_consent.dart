@@ -290,27 +290,41 @@ Future<bool> askAiConsentUpdate(
 ///
 /// One Not now per share: a 5-photo share answered Not now used to ask
 /// five times. The intake numbers each share as its batch event arrives
-/// (IntakePhoto.shareDelivery, [ShareDeliveries]); a Not now covers every
-/// delivery that had arrived by the answer — the share asked about,
-/// however slowly its files are read, and any shared while the question
-/// was open. Their photos are dropped without a question and never sent,
-/// even if the recipient is allowed some other way before their turn (the
-/// user's answer for them was no), and the intake deletes their copies
-/// not read yet, unread. A share that arrives after the answer is asked
-/// about again.
+/// (IntakePhoto.shareDelivery, [ShareDeliveries]); a Not now covers the
+/// share asked about, however slowly its files are read, and every share
+/// that arrived while the question was open. Their photos are dropped
+/// without a question and never sent, even if the recipient is allowed
+/// some other way before their turn (the user's answer for them was no),
+/// and the intake deletes their copies not read yet, unread. A share
+/// already waiting when the question opened, the start-up batch of copies
+/// an earlier run left unread (ShareDeliveries.asksAlone, whenever its
+/// sweep finishes) and one that arrives after the answer get their own
+/// question.
+///
+/// The shell's question answers true (Allow), false (Not now) or null:
+/// no dialog could be shown (the shell is going away). Null is no answer,
+/// like a dialog that failed: nothing is declined, and the photo waits for
+/// the next shell to ask.
 class SharedPhotoConsentGate {
   SharedPhotoConsentGate(this._settings);
 
   final SettingsStore _settings;
-  Future<bool> Function()? _ask;
+  Future<bool?> Function()? _ask;
   Completer<void> _attached = Completer<void>();
+
+  /// Completed by the next [attach]: what a photo whose question could not
+  /// be shown waits for.
+  Completer<void> _reattached = Completer<void>();
 
   /// The share intake's deliveries; null when [gate] was given none (then
   /// a Not now covers the asked photo's delivery as far as photos say).
   ShareDeliveries? _deliveries;
 
-  /// Every delivery up to this is covered by a Not now.
-  int _declinedThrough = 0;
+  /// The deliveries a Not now covers.
+  final Set<int> _declined = {};
+
+  /// The latest delivery that had arrived when the open question opened.
+  int _openedAt = 0;
 
   /// The latest delivery a photo has come from (without [_deliveries]).
   int _latestSeen = 0;
@@ -328,24 +342,32 @@ class SharedPhotoConsentGate {
   /// The app shell's dialog, once it has a navigator; true = allowed (and
   /// recorded). A cold-start share arrives before the first frame and
   /// waits here until then.
-  void attach(Future<bool> Function() ask) {
+  void attach(Future<bool?> Function() ask) {
     _ask = ask;
     if (!_attached.isCompleted) _attached.complete();
+    final waiting = _reattached;
+    _reattached = Completer<void>();
+    waiting.complete();
   }
 
-  void detach(Future<bool> Function() ask) {
+  void detach(Future<bool?> Function() ask) {
     // ==, not identical: two tear-offs of one method are equal only.
     if (_ask != ask) return;
     _ask = null;
     _attached = Completer<void>();
   }
 
-  /// The open question was answered Not now: covers every delivery that
-  /// has arrived by now (at least the asked photo's), tells the intake to
-  /// delete their unread copies, and returns how many shared photos the
-  /// answer leaves unsent — those deliveries' photos not passed on, the
-  /// asked one included. 1 for a photo with no delivery, or when no
-  /// question is open.
+  /// The open question was answered Not now: covers the asked photo's
+  /// delivery and every one that arrived while the question was open (not
+  /// one already waiting when it opened), tells the intake to delete their
+  /// unread copies, and returns how many shared photos the answer leaves
+  /// unsent — those deliveries' photos not passed on, the asked one
+  /// included. 1 for a photo with no delivery, or when no question is
+  /// open.
+  ///
+  /// The count can be a little high, never low: a copy not read yet that
+  /// turns out unusable (an unsupported type, over 25 MB, a failing read)
+  /// is counted too (ShareDeliveries.photoCountOf).
   int declineOpenQuestion() {
     final asking = _asking;
     if (asking == null) return 1;
@@ -353,14 +375,19 @@ class SharedPhotoConsentGate {
     final delivery = asking.shareDelivery;
     if (delivery == null) return 1;
     final deliveries = _deliveries;
-    final through = math.max(
-        delivery, deliveries?.arrivedDelivery ?? _latestSeen);
-    final from = _declinedThrough;
-    if (through > _declinedThrough) _declinedThrough = through;
-    deliveries?.declineThrough(through);
+    final now = deliveries?.arrivedDelivery ?? _latestSeen;
+    final covered = {
+      delivery,
+      for (var d = math.max(_openedAt, delivery) + 1; d <= now; d++)
+        // The start-up batch of copies left unread is no share being made
+        // now: it gets its own question, whenever its sweep finished.
+        if (!(deliveries?.asksAlone(d) ?? false)) d,
+    }..removeAll(_declined);
+    _declined.addAll(covered);
+    if (covered.isNotEmpty) deliveries?.declineDeliveries(covered);
     if (deliveries == null) return 1;
     var notSent = 0;
-    for (var d = from + 1; d <= through; d++) {
+    for (final d in covered) {
       notSent += math.max(0, deliveries.photoCountOf(d) - (_admitted[d] ?? 0));
     }
     return math.max(1, notSent);
@@ -387,7 +414,7 @@ class SharedPhotoConsentGate {
 
     while (true) {
       // Its share was answered Not now: dropped unasked, never sent.
-      if (delivery != null && delivery <= _declinedThrough) return null;
+      if (delivery != null && _declined.contains(delivery)) return null;
       // Re-read after every wait: the user may have allowed it meanwhile.
       if (!aiConsentNeeded(_settings)) return passed();
       final ask = _ask;
@@ -395,19 +422,32 @@ class SharedPhotoConsentGate {
         await _attached.future;
         continue;
       }
+      final nextShell = _reattached.future;
       _asking = photo;
+      _openedAt = _deliveries?.arrivedDelivery ?? _latestSeen;
       _declineMarked = false;
+      final bool? answer;
       try {
-        if (await ask()) return passed();
-        // Not now (or no dialog could be shown): the rest of the share is
-        // covered too. Marked here when the dialog's own line did not.
-        if (!_declineMarked) declineOpenQuestion();
-        return null;
+        answer = await ask();
       } catch (_) {
-        return null; // a failed dialog is not consent
-      } finally {
         _asking = null;
+        return null; // a failed dialog is not consent
       }
+      if (answer == true) {
+        _asking = null;
+        return passed();
+      }
+      if (answer == false) {
+        // Not now: the rest of the share is covered too. Marked here when
+        // the dialog's own line did not.
+        if (!_declineMarked) declineOpenQuestion();
+        _asking = null;
+        return null;
+      }
+      // No dialog could be shown: no answer. Nothing is declined; the
+      // photo waits for the next shell's question.
+      _asking = null;
+      await nextShell;
     }
   }
 }

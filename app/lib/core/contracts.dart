@@ -665,13 +665,21 @@ abstract interface class ShareDeliveries {
   /// The latest delivery whose batch event has arrived (0: none yet).
   int get arrivedDelivery;
 
-  /// How many photos [delivery] may still bring: its copies, less those
-  /// already found unreadable.
+  /// How many photos [delivery] holds as far as is known now: all its
+  /// copies, less those already found unreadable. A copy not read yet
+  /// counts, even when it will turn out unusable (an unsupported type,
+  /// over 25 MB, a read that fails), so this can be high, never low.
   int photoCountOf(int delivery);
 
-  /// Every copy of deliveries up to [delivery] not read yet is deleted
-  /// unread, never handed on.
-  void declineThrough(int delivery);
+  /// Every copy of [deliveries] not read yet is deleted unread (at once,
+  /// even while the stream is paused), never handed on.
+  void declineDeliveries(Set<int> deliveries);
+
+  /// Whether [delivery] is only ever covered by an answer about itself:
+  /// the start-up batch of copies an earlier run left unread, which is no
+  /// share the user is making now, so another share's Not now never
+  /// declines it, whenever its sweep finishes.
+  bool asksAlone(int delivery);
 }
 
 /// Meta glasses photos one automatic scan sends on to the model at most

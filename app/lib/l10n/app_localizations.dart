@@ -5519,7 +5519,7 @@ abstract class AppLocalizations {
   /// **'Set up https on your server, then change the server address to https://… in Settings.'**
   String get diagFixServerHttps;
 
-  /// Snackbar after Not now on the AI consent question for a share of several photos: one Not now covers every photo of that share (and any shared before the answer). count is 2 or more; one photo uses shareConsentDeclined.
+  /// Snackbar after Not now on the AI consent question for a share of several photos: one Not now covers that share and any shared while the question was open (not the start-up batch of copies an earlier run left unread, which is asked about on its own). count is 2 or more; one photo uses shareConsentDeclined. The count is those shares' photos not passed on, as known at the answer: a copy not read yet that turns out unusable (an unsupported type, over 25 MB, a read that fails) is counted too, so it can be a little high, never low.
   ///
   /// In en, this message translates to:
   /// **'{count} shared photos were not analyzed — nothing was sent.'**

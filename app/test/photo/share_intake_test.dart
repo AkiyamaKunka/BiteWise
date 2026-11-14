@@ -809,6 +809,28 @@ void main() {
       await sub.cancel();
     });
 
+    // Review of 46da8b74, low 4: a declined share's copies go at once, even
+    // while the stream stays paused, and a declined delivery is never
+    // waited on.
+    test('declined while paused: the rest of that share is deleted unread '
+        'at once', () async {
+      final source = FakeShareSource();
+      final intake = counting(source);
+      final paths = share(6);
+      late StreamSubscription<IntakePhoto> sub;
+      sub = intake.photos().listen((_) => sub.pause());
+      source.controller.add(paths);
+      await pumpEventQueue(times: 50);
+      final readBefore = reads.length;
+      expect(readBefore, lessThanOrEqualTo(2));
+      intake.declineDeliveries({1});
+      await pumpEventQueue(times: 50);
+      expect(sub.isPaused, isTrue);
+      expect(reads.length, readBefore, reason: 'nothing more is read');
+      expect(cleaned.toSet(), paths.toSet(), reason: 'deleted, not waiting');
+      await sub.cancel();
+    });
+
     test('a copy found unreadable is not counted as a photo', () async {
       final source = FakeShareSource();
       final intake = counting(source);
@@ -920,6 +942,52 @@ void main() {
       await sub.cancel();
     });
 
+    // Review of 46da8b74, low 1: the launch share of a cold start, then the
+    // start-up batch. One Not now covers the launch share (its 2 photos,
+    // said as 2), and the copies left unread get a question of their own.
+    test('cold start: Not now on the launch share leaves the copies left '
+        'unread to their own question', () async {
+      final left = [
+        for (var i = 0; i < 3; i++)
+          copyAt('l$i', 'IMG_left$i.jpg', Duration(hours: 3 - i)),
+      ];
+      final launch = [
+        copyAt('n0', 'IMG_new0.jpg', Duration.zero),
+        copyAt('n1', 'IMG_new1.jpg', Duration.zero),
+      ];
+      final source = FakeShareSource()
+        ..initial = [for (final f in launch) f.path];
+      final read = <String>[];
+      final intake = android(source, read);
+      final settings = FakeSettings(apiKey: 'k')..aiConsent = {};
+      final gate = SharedPhotoConsentGate(settings);
+      final passed = <String>[];
+      final notSent = <int>[];
+      var asked = 0;
+      gate.attach(() async {
+        asked++;
+        if (asked == 1) {
+          // The question is open until the start-up batch has arrived.
+          await until(() => intake.arrivedDelivery >= 2, 'the start-up batch');
+          notSent.add(gate.declineOpenQuestion());
+          return false;
+        }
+        settings.aiConsent = {'gemini'};
+        return true;
+      });
+      final sub = gate
+          .gate(intake.photos(), deliveries: intake)
+          .listen((p) => passed.add(p.fileName));
+      await until(() => passed.length >= 3, 'the copies left unread logged');
+      expect(notSent, [2], reason: 'the launch share, not 5');
+      expect(asked, 2);
+      expect(passed, ['IMG_left0.jpg', 'IMG_left1.jpg', 'IMG_left2.jpg']);
+      for (final f in [...launch, ...left]) {
+        expect(f.existsSync(), isFalse, reason: f.path);
+      }
+      await sub.cancel();
+    });
+
     test('a copy both left over and in a live share is logged once',
         () async {
       final c = copyAt('u1', 'IMG_x.jpg', const Duration(minutes: 5));
@@ -927,14 +995,21 @@ void main() {
       final source = FakeShareSource();
       final read = <String>[];
       final emitted = <String>[];
-      final sub = android(source, read)
-          .photos()
-          .listen((p) => emitted.add(p.fileName));
+      final intake = android(source, read);
+      final sub = intake.photos().listen((p) => emitted.add(p.fileName));
       source.controller.add([c.path]);
       await until(() => emitted.length >= 2, 'the live copy and the sentinel');
       expect(emitted.where((n) => n == 'IMG_x.jpg'), hasLength(1),
           reason: 'logged once, not once per route');
       expect(emitted.toSet(), {'IMG_x.jpg', 'IMG_s.jpg'});
+      // And counted once: a Not now's line would otherwise say one more
+      // (review of 46da8b74, low 2).
+      expect(
+          [
+            for (var d = 1; d <= intake.arrivedDelivery; d++)
+              intake.photoCountOf(d)
+          ].fold<int>(0, (a, b) => a + b),
+          2);
       await sub.cancel();
     });
 

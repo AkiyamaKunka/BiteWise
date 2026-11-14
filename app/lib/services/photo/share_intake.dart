@@ -198,9 +198,24 @@ class ShareIntake implements ShareDeliveries {
   final Map<int, int> _deliverySize = {};
   final Map<int, int> _deliveryUnreadable = {};
 
-  /// Deliveries up to this were declined by the consent gate: their copies
-  /// not read yet are deleted unread.
-  int _declinedThrough = 0;
+  /// Deliveries the consent gate declined: their copies not read yet are
+  /// deleted unread.
+  final Set<int> _declined = {};
+
+  /// Android: every copy path handed to a delivery so far (normalized).
+  /// The start-up sweep and a live share can name the same copy (one
+  /// older than [strandedMinAge] whose event comes late): it goes to the
+  /// first delivery only, so it is counted, and read, once.
+  final Set<String> _delivered = {};
+
+  /// Wakes the reader from its pause-wait (set by [photos]).
+  void Function()? _wakeReader;
+
+  /// The start-up batches of copies left unread ([asksAlone]).
+  final Set<int> _startupBatches = {};
+
+  @override
+  bool asksAlone(int delivery) => _startupBatches.contains(delivery);
 
   @override
   int get arrivedDelivery => _deliveries;
@@ -210,8 +225,10 @@ class ShareIntake implements ShareDeliveries {
       (_deliverySize[delivery] ?? 0) - (_deliveryUnreadable[delivery] ?? 0);
 
   @override
-  void declineThrough(int delivery) {
-    if (delivery > _declinedThrough) _declinedThrough = delivery;
+  void declineDeliveries(Set<int> deliveries) {
+    _declined.addAll(deliveries);
+    // Their unread copies go now, not when the stream resumes.
+    _wakeReader?.call();
   }
 
   /// Cold-start share first, then live shares for the app's lifetime.
@@ -255,13 +272,18 @@ class ShareIntake implements ShareDeliveries {
     Future<void> emitPaths(List<String> paths, int delivery) async {
       void unreadable() => _deliveryUnreadable[delivery] =
           (_deliveryUnreadable[delivery] ?? 0) + 1;
+      bool declined() => _declined.contains(delivery);
       for (final path in paths) {
-        while (_copiesWait && controller.isPaused && !cancelled) {
+        // A declined delivery is never waited on.
+        while (_copiesWait &&
+            controller.isPaused &&
+            !cancelled &&
+            !declined()) {
           await (resumed ??= Completer<void>()).future;
         }
         // Cancelled, or declined by the consent gate's Not now: not read,
         // but not left in the cache either.
-        if (cancelled || controller.isClosed || delivery <= _declinedThrough) {
+        if (cancelled || controller.isClosed || declined()) {
           await _discard(path);
           continue;
         }
@@ -283,15 +305,23 @@ class ShareIntake implements ShareDeliveries {
     // One reader, batch after batch: a failure cannot break the chain, or
     // every later share would wait behind it for good. The delivery is
     // numbered here, as its batch event arrives (an empty one is none).
-    void enqueue(List<String> paths) {
+    void enqueue(List<String> batch, {bool leftOver = false}) {
+      // Android's copies each have a path of their own: one already given
+      // to a delivery (the start-up sweep and a late live event) is not
+      // given again. iOS reuses names for new copies: never deduplicated.
+      final paths = _copiesWait
+          ? [for (final p in batch) if (_delivered.add(_normalized(p))) p]
+          : batch;
       if (paths.isEmpty) return;
       final delivery = ++_deliveries;
+      if (leftOver) _startupBatches.add(delivery);
       _deliverySize[delivery] = paths.length;
       reading = reading
           .then((_) => emitPaths(paths, delivery))
           .catchError((Object _) {});
     }
 
+    _wakeReader = wake;
     controller = StreamController<IntakePhoto>(
       onListen: () async {
         final initial = await _source.initialImagePaths();
@@ -305,11 +335,12 @@ class ShareIntake implements ShareDeliveries {
             onDone: () => reading = reading.then((_) => controller.close()));
         if (_copiesWait) {
           final left = await _leftOver(initial);
-          if (!cancelled && left.isNotEmpty) enqueue(left);
+          if (!cancelled && left.isNotEmpty) enqueue(left, leftOver: true);
         }
       },
       onResume: wake,
       onCancel: () async {
+        _wakeReader = null;
         cancelled = true;
         wake();
         await liveSub?.cancel();

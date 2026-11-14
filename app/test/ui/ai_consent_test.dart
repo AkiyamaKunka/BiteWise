@@ -45,7 +45,7 @@ IntakePhoto _photo(String id, {int? delivery}) => IntakePhoto(
 class _Deliveries implements ShareDeliveries {
   final sizes = <int, int>{};
   final unreadable = <int, int>{};
-  int declinedThrough = 0;
+  final declined = <int>{};
   int _arrived = 0;
 
   /// A batch event of [n] copies arrives; its number.
@@ -62,9 +62,13 @@ class _Deliveries implements ShareDeliveries {
       (sizes[delivery] ?? 0) - (unreadable[delivery] ?? 0);
 
   @override
-  void declineThrough(int delivery) {
-    if (delivery > declinedThrough) declinedThrough = delivery;
-  }
+  void declineDeliveries(Set<int> deliveries) => declined.addAll(deliveries);
+
+  /// Start-up batches of copies left unread.
+  final alone = <int>{};
+
+  @override
+  bool asksAlone(int delivery) => alone.contains(delivery);
 }
 
 Finder get _dialog => find.byKey(const Key('aiConsentDialog'));
@@ -876,7 +880,7 @@ void main() {
       await pumpEventQueue();
       expect(asked, 1);
       expect(notSent, [5], reason: 'all five, four never read');
-      expect(deliveries.declinedThrough, 1);
+      expect(deliveries.declined, {1});
       expect(passed, isEmpty);
       // One read ahead before the answer is dropped, not asked.
       input.add(first[1]);
@@ -913,7 +917,7 @@ void main() {
       open.complete(false);
       await pumpEventQueue();
       expect(notSent, [5]);
-      expect(deliveries.declinedThrough, 2);
+      expect(deliveries.declined, {1, 2});
       [...a.skip(1), ...b].forEach(input.add);
       await pumpEventQueue();
       expect(asked, 1);
@@ -964,12 +968,11 @@ void main() {
       gate.detach(ask);
     });
 
-    test('a cold-start share waits for the shell; one Not now, even with no '
-        'dialog shown, covers all of it', () async {
+    test('a cold-start share waits for the shell; one Not now covers all of '
+        'it', () async {
       share('p', 3).forEach(input.add);
       await pumpEventQueue();
       var asked = 0;
-      // The shell answers false without a dialog (it is going away).
       Future<bool> ask() async {
         asked++;
         return false;
@@ -979,7 +982,106 @@ void main() {
       await pumpEventQueue();
       expect(asked, 1);
       expect(passed, isEmpty);
-      expect(deliveries.declinedThrough, 1);
+      expect(deliveries.declined, {1});
+      gate.detach(ask);
+    });
+
+    // Review of 46da8b74, low 3: a shell going away answers without showing
+    // a dialog (null). That is no answer: nothing is declined, and the
+    // photo waits for the next shell's question.
+    test('no dialog shown (null) is not a Not now: nothing declined, the '
+        'photo waits for the next shell', () async {
+      var stale = 0;
+      Future<bool?> goingAway() async {
+        stale++;
+        return null;
+      }
+
+      gate.attach(goingAway);
+      share('w', 2).forEach(input.add);
+      await pumpEventQueue();
+      expect(stale, 1, reason: 'asked once, then it waits: no spinning');
+      expect(deliveries.declined, isEmpty);
+      expect(passed, isEmpty);
+
+      var asked = 0;
+      Future<bool> fresh() async {
+        asked++;
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      gate.detach(goingAway);
+      gate.attach(fresh);
+      await pumpEventQueue();
+      expect(stale, 1);
+      expect(asked, 1);
+      expect(passed, ['w-1', 'w-2']);
+      gate.detach(fresh);
+    });
+
+    // Review of 46da8b74, low 1: at a cold start the start-up batch of
+    // copies left unread is numbered right after the launch share, before
+    // the question opens. A Not now covers the share asked about and those
+    // that arrive while it is open, not a delivery already waiting: that
+    // one gets its own question.
+    test('the start-up batch arriving while the question is open is not '
+        'covered either', () async {
+      final open = Completer<void>();
+      final notSent = <int>[];
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        if (asked == 1) {
+          await open.future;
+          notSent.add(gate.declineOpenQuestion());
+          return false;
+        }
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      gate.attach(ask);
+      final launch = share('launch', 2);
+      input.add(launch.first);
+      await pumpEventQueue();
+      final left = share('left', 3); // its sweep finished late
+      deliveries.alone.add(2);
+      final live = share('live', 1); // a share made while asked
+      open.complete();
+      await pumpEventQueue();
+      expect(notSent, [3], reason: 'the launch share and the live share');
+      expect(deliveries.declined, {1, 3});
+      [...launch.skip(1), ...left, ...live].forEach(input.add);
+      await pumpEventQueue();
+      expect(asked, 2);
+      expect(passed, ['left-1', 'left-2', 'left-3']);
+      gate.detach(ask);
+    });
+
+    test('a delivery already waiting when the question opens gets its own '
+        'question', () async {
+      final notSent = <int>[];
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        if (asked == 1) {
+          notSent.add(gate.declineOpenQuestion());
+          return false;
+        }
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      final launch = share('launch', 2);
+      final stranded = share('left', 3); // numbered before the question
+      gate.attach(ask);
+      [...launch, ...stranded].forEach(input.add);
+      await pumpEventQueue();
+      expect(notSent, [2], reason: 'the launch share only');
+      expect(deliveries.declined, {1});
+      expect(asked, 2, reason: 'the waiting batch is asked about');
+      expect(passed, ['left-1', 'left-2', 'left-3']);
       gate.detach(ask);
     });
 
@@ -997,7 +1099,7 @@ void main() {
       await pumpEventQueue();
       expect(asked, 1);
       expect(passed, ['a-1', 'a-2', 'a-3', 'a-4']);
-      expect(deliveries.declinedThrough, 0);
+      expect(deliveries.declined, isEmpty);
       gate.detach(ask);
     });
 
@@ -1043,7 +1145,7 @@ void main() {
       await pumpEventQueue();
       expect(asked, 2);
       expect(notSent, [1, 1]);
-      expect(deliveries.declinedThrough, 0);
+      expect(deliveries.declined, isEmpty);
       gate.detach(ask);
     });
 
