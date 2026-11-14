@@ -12,6 +12,13 @@
 /// - R-F9: the English name is Chopstats everywhere (renamed from BiteWise
 ///   2026-10-29); 筷拍 in Chinese.
 /// - R-F7: the privacy policy's third-party and consent section.
+/// - Google Play (2026-11-13, docs/RELEASING.md § 6): the listing pack in
+///   app/android/store/ within Play's limits and with Google's health
+///   disclaimer, the graphics Play accepts, the What's new texts, the
+///   themed icon and the Android 12+ splash, release.yml's play_track and
+///   its v*-only tag trigger (decision 4: android-v* tags start no run),
+///   CI builds that never use the Aliyun mirrors (C44), § 6's corrected
+///   answers, and the policy's "Who we are".
 library;
 
 import 'dart:convert';
@@ -163,6 +170,12 @@ const _collectedTypes = [
 
 /// Chinese, Japanese and full-width characters.
 final _cjk = RegExp(r'[⺀-鿿豈-﫿＀-￯　-〿]');
+
+/// Characters as Play counts them: one per Unicode code point, full-width
+/// and half-width alike (answer/9866151). A file's final newline is not
+/// part of the pasted text.
+int _playLength(String fileText) =>
+    fileText.replaceFirst(RegExp(r'\n$'), '').runes.length;
 
 void main() {
   group('R-F8: App Privacy answer B in the manifests', () {
@@ -587,4 +600,137 @@ void main() {
       expect(zh, contains('• 你为修正餐食输入的文字，连同最近 7 天的餐食'));
     });
   });
+  group('Google Play listing (app/android/store/metadata)', () {
+    const locales = ['en-US', 'zh-CN'];
+    String listing(String locale, String name) =>
+        _read('android/store/metadata/$locale/$name.txt');
+
+    test("title, short and full descriptions fit Play's limits", () {
+      for (final locale in locales) {
+        final title = listing(locale, 'title');
+        final short = listing(locale, 'short_description');
+        final full = listing(locale, 'full_description');
+        expect(title.trim(), 'Chopstats · 筷拍', reason: locale);
+        expect(_playLength(title), lessThanOrEqualTo(30), reason: locale);
+        expect(_playLength(short), inInclusiveRange(10, 80), reason: locale);
+        expect(_playLength(full), inInclusiveRange(500, 4000), reason: locale);
+        // Google's advice for the short description: no special characters
+        // (the title's single · is fine there), no closing period.
+        expect(short, isNot(contains('·')), reason: locale);
+        expect(short.trim(), isNot(endsWith('.')), reason: locale);
+      }
+      expect(_playLength('筷拍\n'), 2, reason: 'one per character');
+    });
+
+    // The Health Content and Services policy (answer/16679511): Google's
+    // disclaimer in the description, word for word, and the reminder to
+    // consult a healthcare professional.
+    test("the full descriptions end with Google's health disclaimer", () {
+      final en = listing('en-US', 'full_description')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      expect(
+          en,
+          contains('Chopstats is not a medical device and does not diagnose, '
+              'treat, cure, or prevent any medical condition.'));
+      expect(
+          en,
+          endsWith('Consult a healthcare professional for medical advice, '
+              'diagnosis, or treatment.'));
+      final zh = listing('zh-CN', 'full_description').trim();
+      expect(zh, contains('筷拍不是医疗器械，不能诊断、治疗、治愈或预防任何疾病。'));
+      expect(zh, endsWith('如需医疗建议、诊断或治疗，请咨询医疗专业人员。'));
+    });
+
+    // Android facts only; nothing the first Play build lacks (decision 1:
+    // no Watch Camera Roll on Play), nothing about the sideload channel,
+    // and no claim nobody can check.
+    test('says nothing iPhone-only, sideload-only or unverifiable', () {
+      final banned = RegExp(
+        r'github|\bapk\b|sideload|telegram|\bvpn\b|\bios\b|iphone|keychain|'
+        r'apple maps|camera roll|glasses|photo coverage|\b174\b|%|#1|\bbest\b|'
+        r'accura|worldwide|监控相册|眼镜|钥匙串|照片覆盖|准确率',
+        caseSensitive: false,
+      );
+      for (final locale in locales) {
+        for (final name in ['title', 'short_description', 'full_description']) {
+          expect(banned.firstMatch(listing(locale, name))?.group(0), isNull,
+              reason: '$locale/$name');
+        }
+      }
+    });
+
+    test("names the app's controls as the app does", () {
+      final en = AppLocalizationsEn();
+      final zh = AppLocalizationsZh();
+      final enText = listing('en-US', 'full_description');
+      final zhText = listing('zh-CN', 'full_description');
+      expect(enText, contains(en.addUsual));
+      expect(enText, contains(en.settingsSectionRestaurant));
+      expect(zhText, contains(zh.addUsual));
+      expect(zhText, contains('「${zh.settingsSectionRestaurant}」'));
+    });
+
+    // The zh text quotes examples and control names in 「」, as the app and
+    // the policy's 中文 half do: no ASCII or curly double quotes.
+    test('zh-CN quotes in 「」 only', () {
+      for (final name in ['title', 'short_description', 'full_description']) {
+        final text = listing('zh-CN', name);
+        for (final quote in ['"', '“', '”']) {
+          expect(text, isNot(contains(quote)), reason: '$name $quote');
+        }
+      }
+      final full = listing('zh-CN', 'full_description');
+      for (final example in [
+        '米饭（~150 克）',
+        '那碗面其实是烧鸭饭',
+        '一碗牛肉面加一个鸡蛋',
+        'two eggs and toast with butter',
+        '素食',
+        '家常菜，少油',
+      ]) {
+        expect(full, contains('「$example」'), reason: example);
+      }
+    });
+
+    test('the answers files hold no key and no email address', () {
+      for (final name in ['app_content.md', 'data_safety.md']) {
+        final text = _read('android/store/$name');
+        expect(RegExp(r'AIza[0-9A-Za-z_-]{20,}').hasMatch(text), isFalse,
+            reason: '$name: a Google API key');
+        expect(RegExp(r'\bsk-[A-Za-z0-9-]{8,}').hasMatch(text), isFalse,
+            reason: '$name: an API key');
+        expect(
+            RegExp(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]').hasMatch(text),
+            isFalse,
+            reason: '$name: an email address');
+      }
+      expect(_read('android/store/app_content.md'),
+          contains("<the demo key from the owner's release notes>"));
+    });
+
+    // Data safety by Google's definitions (answer/10787469): anything sent
+    // off the phone is collected; not ephemeral; the exemptions named.
+    test("data_safety.md answers by Google's definitions", () {
+      final text =
+          _read('android/store/data_safety.md').replaceAll(RegExp(r'\s+'), ' ');
+      for (final type in [
+        '**Photos and videos › Photos**',
+        '**Health and fitness › Health info**',
+        '**Health and fitness › Fitness info**',
+        '**App activity › Other user-generated content**',
+        '**Location › Approximate location**',
+      ]) {
+        expect(text, contains(type), reason: type);
+      }
+      expect(text, contains('**Shared:** No'));
+      expect(text, contains('**Processed ephemerally:** No'));
+      expect(text, contains('**App functionality** only'));
+      expect(text, contains('My app does not allow users to create an account'));
+      expect(text, contains('a specific user-initiated action'));
+      expect(text,
+          contains("a prominent in-app disclosure and the user's consent"));
+    });
+  });
+
 }

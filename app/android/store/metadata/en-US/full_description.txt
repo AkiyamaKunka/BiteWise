@@ -1,0 +1,37 @@
+Chopstats · 筷拍 turns your food photos into calorie and macro estimates using the AI service you choose, with your own API key. There is no account to create and no server of ours in between.
+
+HOW IT WORKS
+• Take meal photos the way you already do. Pick one with Android's photo picker, or share it into Chopstats from Google Photos or another app.
+• The photo goes to the AI provider you picked. It names the dishes, states the portion it assumed (for example "Steamed rice (~150 g)") and estimates calories, protein, carbs and fat.
+• Every number can be changed. Open a meal to edit its items and numbers, or just type a fix such as "the noodles were roast duck rice".
+
+LOG IT YOUR WAY
+• From a photo
+• Describe a meal in any language: "two eggs and toast with butter" or "一碗牛肉面加一个鸡蛋"
+• Enter the numbers yourself, no AI needed
+• My usual foods: the meals you logged on at least 2 of the last 90 days. Tap one to log it again, with no photo and no AI
+• Leftovers: photograph what is left and the meal shrinks to what you actually ate
+• Restaurant nutrition, off by default: for a photo meal eaten in the US at a chain restaurant whose brand is printed on a cup, bag, box or receipt in the photo, your AI service can look up the nutrition the chain publishes. It needs your own server or an Anthropic or OpenRouter key
+• Add a dietary profile (for example "vegetarian" or "home cooking, light oil") that the AI reads with every photo
+
+SEE YOUR DAY AND YOUR TREND
+• Today: calories, protein, carbs and fat, next to your typical day
+• History: a 30-day chart with daily totals and your average
+• Body: a weight trend chart plus waist, chest and hip measurements, in metric or imperial units
+• An optional daily summary notification at the time you choose, measured against your typical day or a calorie goal you set
+• Share your whole day as one image
+
+BRING YOUR OWN AI
+Paste an API key from Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao or Zhipu GLM. You pay the provider directly for what you use, and some offer a free tier. A one-tap test tells you whether your key, network and quota work. Advanced users can route analysis through a server they run themselves.
+
+YOUR DATA STAYS ON YOUR PHONE
+• No sign-up and no account. Chopstats has no backend, and the developer receives none of your data.
+• Your meals, weight and settings are stored on your phone. API keys are kept in encrypted storage protected by the Android Keystore.
+• Data leaves your phone only to reach the AI service you chose (or your own server, if you set one up), and only after you allow it: the photo or text being analyzed, plus the context it needs, such as your dietary profile or recent meal names when you ask for a fix. The copy of a photo that is sent has its embedded metadata, such as location, removed. Restaurant nutrition, if you turn it on, sends chain and food names to that AI service's web search; on Android, Chopstats never reads where a photo was taken. The privacy policy lists exactly what is sent.
+• No ads, no analytics and no tracking. Export your data to a file whenever you like.
+• Open source.
+
+Available in English and Simplified Chinese.
+
+PLEASE NOTE
+Calories and nutrients are AI estimates from photos and descriptions, and they can be wrong. Check them and correct them. Chopstats is not a medical device and does not diagnose, treat, cure, or prevent any medical condition. Consult a healthcare professional for medical advice, diagnosis, or treatment.
