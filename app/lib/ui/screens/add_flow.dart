@@ -25,6 +25,7 @@ import '../l10n.dart';
 import '../large_text.dart';
 import '../theme/app_dialog.dart';
 import '../theme/tokens.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/grouped.dart';
 import '../widgets/reply_note.dart';
 import '../widgets/states.dart';
@@ -874,6 +875,19 @@ class _AddTextScreenState extends State<AddTextScreen> {
   /// On the error note, to scroll it into view (A15).
   final GlobalKey _errorKey = GlobalKey();
 
+  /// Text typed and not on its way (Android push): back asks before it
+  /// drops it. While it is sent, or once the preview is saved, back leaves.
+  bool get _typed => !_sending && _controller.text.trim().isNotEmpty;
+  bool _shownTyped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(() {
+      if (mounted && _typed != _shownTyped) setState(() {});
+    });
+  }
+
   @override
   void dispose() {
     _controller.dispose();
@@ -941,6 +955,7 @@ class _AddTextScreenState extends State<AddTextScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final error = _error;
+    _shownTyped = _typed;
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.describeTitle)),
       // SCROLLABLE: the field is autofocused (keyboard up on entry) and the
@@ -954,6 +969,10 @@ class _AddTextScreenState extends State<AddTextScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Holds this route's pop while typed text would be lost (no
+            // size of its own: the guard is for the whole screen).
+            DiscardChangesGuard(
+                dirty: _shownTyped, child: const SizedBox.shrink()),
             TextField(
               key: const Key('addTextField'),
               controller: _controller,

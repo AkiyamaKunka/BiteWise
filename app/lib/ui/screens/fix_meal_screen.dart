@@ -15,6 +15,7 @@ import '../l10n.dart';
 import '../services.dart' show SettingsStore;
 import '../large_text.dart';
 import '../theme/tokens.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/reply_note.dart';
 import '../widgets/small_spinner.dart';
 
@@ -48,6 +49,23 @@ class _FixMealScreenState extends State<FixMealScreen> {
   /// a question), kept on the page until the next request (U11).
   String? _note;
   final GlobalKey _noteKey = GlobalKey();
+
+  /// A request typed and not sent (or not applied: the field keeps it
+  /// then). A back gesture asks before it drops that; a field emptied by
+  /// an applied request, or a request on its way (nothing typed is lost
+  /// by leaving, and a server's answer can take 20 s), leaves freely.
+  bool get _typed => !_sending && _controller.text.trim().isNotEmpty;
+  bool _shownTyped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_watchTyped);
+  }
+
+  void _watchTyped() {
+    if (mounted && _typed != _shownTyped) setState(() {});
+  }
 
   @override
   void dispose() {
@@ -131,79 +149,83 @@ class _FixMealScreenState extends State<FixMealScreen> {
     final muted =
         theme.textTheme.bodySmall?.copyWith(color: context.colors.secondaryLabel);
     final note = _note;
-    return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.fixTitle)),
-      // Scrollable for the same reason as AddTextScreen: autofocused
-      // keyboard + multi-line refusal messages must never push the send
-      // button off-screen.
-      body: SingleChildScrollView(
-        // More room on top at large text: the field's floating label rises
-        // about 20 pt above it at AX5, past the 16-pt padding.
-        padding: EdgeInsets.fromLTRB(
-            AppSpace.gutter,
-            isLargeText(context) ? AppSpace.s24 : AppSpace.gutter,
-            AppSpace.gutter,
-            AppSpace.gutter),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              key: const Key('fixMealField'),
-              controller: _controller,
-              maxLines: 3,
-              autofocus: true,
-              enabled: !_sending,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => _send(),
-              decoration: InputDecoration(
-                labelText: context.l10n.fixLabel,
-                hintText: context.l10n.fixHint,
-              ),
-            ),
-            // The instructions read as the field's footer, the way
-            // Describe's help sits under its field.
-            const SizedBox(height: AppSpace.s8),
-            Text(context.l10n.fixIntro, style: muted),
-            const SizedBox(height: AppSpace.s4),
-            // The old copy promised "the meal numbers match the Today
-            // list". They do not: Today renders no numbers at all, and the
-            // model resolves an index against a SEVEN-DAY window led by
-            // earlier days — so "meal 2" could rewrite yesterday's lunch
-            // (review 2026-07-31). Describing the dish is unambiguous.
-            Text(context.l10n.fixNamingTip, style: muted),
-            // Hidden while a new request runs: it answered the last one.
-            if (note != null && !_sending) ...[
-              const SizedBox(height: AppSpace.s12),
-              ReplyNote(
-                key: _noteKey,
-                message: note,
-                textKey: const Key('fixMealNote'),
-              ),
-            ],
-            const SizedBox(height: AppSpace.s16),
-            FilledButton.icon(
-              key: const Key('fixMealSend'),
-              onPressed: _sending ? null : _send,
-              icon: _sending
-                  ? const SmallSpinner()
-                  : const Icon(Icons.build_outlined),
-              label: Text(_sending ? context.l10n.working : context.l10n.fixApply),
-            ),
-            if (_log.isNotEmpty) ...[
-              const SizedBox(height: AppSpace.s24),
-              Semantics(
-                header: true,
-                child: Text(context.l10n.fixAppliedHeader,
-                    style: theme.textTheme.titleSmall
-                        ?.copyWith(color: context.colors.secondaryLabel)),
-              ),
-              for (final line in _log.reversed)
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text('• $line', style: theme.textTheme.bodyMedium),
+    _shownTyped = _typed;
+    return DiscardChangesGuard(
+      dirty: _shownTyped,
+      child: Scaffold(
+        appBar: AppBar(title: Text(context.l10n.fixTitle)),
+        // Scrollable for the same reason as AddTextScreen: autofocused
+        // keyboard + multi-line refusal messages must never push the send
+        // button off-screen.
+        body: SingleChildScrollView(
+          // More room on top at large text: the field's floating label rises
+          // about 20 pt above it at AX5, past the 16-pt padding.
+          padding: EdgeInsets.fromLTRB(
+              AppSpace.gutter,
+              isLargeText(context) ? AppSpace.s24 : AppSpace.gutter,
+              AppSpace.gutter,
+              AppSpace.gutter),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                key: const Key('fixMealField'),
+                controller: _controller,
+                maxLines: 3,
+                autofocus: true,
+                enabled: !_sending,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _send(),
+                decoration: InputDecoration(
+                  labelText: context.l10n.fixLabel,
+                  hintText: context.l10n.fixHint,
                 ),
+              ),
+              // The instructions read as the field's footer, the way
+              // Describe's help sits under its field.
+              const SizedBox(height: AppSpace.s8),
+              Text(context.l10n.fixIntro, style: muted),
+              const SizedBox(height: AppSpace.s4),
+              // The old copy promised "the meal numbers match the Today
+              // list". They do not: Today renders no numbers at all, and the
+              // model resolves an index against a SEVEN-DAY window led by
+              // earlier days — so "meal 2" could rewrite yesterday's lunch
+              // (review 2026-07-31). Describing the dish is unambiguous.
+              Text(context.l10n.fixNamingTip, style: muted),
+              // Hidden while a new request runs: it answered the last one.
+              if (note != null && !_sending) ...[
+                const SizedBox(height: AppSpace.s12),
+                ReplyNote(
+                  key: _noteKey,
+                  message: note,
+                  textKey: const Key('fixMealNote'),
+                ),
+              ],
+              const SizedBox(height: AppSpace.s16),
+              FilledButton.icon(
+                key: const Key('fixMealSend'),
+                onPressed: _sending ? null : _send,
+                icon: _sending
+                    ? const SmallSpinner()
+                    : const Icon(Icons.build_outlined),
+                label: Text(_sending ? context.l10n.working : context.l10n.fixApply),
+              ),
+              if (_log.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.s24),
+                Semantics(
+                  header: true,
+                  child: Text(context.l10n.fixAppliedHeader,
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(color: context.colors.secondaryLabel)),
+                ),
+                for (final line in _log.reversed)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text('• $line', style: theme.textTheme.bodyMedium),
+                  ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

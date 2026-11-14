@@ -166,8 +166,9 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (summaryBatteryRestrictedHint, notificationsAllowAction,
 /// notificationMealChannelName/Description, watcherAllowAllPhotos,
 /// coachWeekday, coachTitleOnDay, coachEmptyOnDay, diagBgRunNotFinished,
-/// watcherLimitedFooterIos).
-const _keyCount = 904;
+/// watcherLimitedFooterIos), then the Android push's ui lane: the
+/// discard-changes question (discardChangesTitle, Body, Keep, Discard).
+const _keyCount = 908;
 
 Directory _appRoot() {
   var dir = Directory.current;

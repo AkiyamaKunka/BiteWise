@@ -495,7 +495,7 @@ void main() {
       await pumpGrid(tester);
       expect(find.semantics.byLabel('Photo 1 of 3, Thursday, Jul 30 12:05 PM'),
           findsOne);
-      expect(find.semantics.byLabel('Photo 3 of 3, Thursday, Jul 30 02:05 PM'),
+      expect(find.semantics.byLabel('Photo 3 of 3, Thursday, Jul 30 2:05 PM'),
           findsOne);
       handle.dispose();
     });

@@ -3,6 +3,7 @@
 // pin it); Chinese must never leak English for a recognised kind; anything
 // unrecognised falls back to the raw line rather than a wrong guess.
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/outcome_text.dart';
@@ -404,6 +405,12 @@ void main() {
     expect(line(en, 'regionBlocked'), contains('Log › From recent photos'));
   });
 
+  // These pin the DAY count, so the clock is fixed at 24-hour (the label
+  // follows the phone's 12/24-hour setting since the Android push; that is
+  // pinned in clock_format_test.dart).
+  String label24(AppLocalizations l, DateTime when, {DateTime? now}) =>
+      dayTimeLabel(l, when, now: now, use24h: true);
+
   // dayTimeLabel took the elapsed time between two LOCAL midnights, and the
   // spring-forward day is 23 h long: in a DST zone it said "Today" for
   // tomorrow and for yesterday (run 7, B21). Counting calendar dates holds
@@ -423,15 +430,15 @@ void main() {
     });
 
     test('the labels on those days', () {
-      expect(dayTimeLabel(en, DateTime(2027, 3, 15, 21), now: DateTime(2027, 3, 14, 22)),
+      expect(label24(en, DateTime(2027, 3, 15, 21), now: DateTime(2027, 3, 14, 22)),
           en.timeTomorrow('21:00'));
-      expect(dayTimeLabel(zh, DateTime(2027, 3, 15, 21), now: DateTime(2027, 3, 14, 22)),
+      expect(label24(zh, DateTime(2027, 3, 15, 21), now: DateTime(2027, 3, 14, 22)),
           zh.timeTomorrow('21:00'));
-      expect(dayTimeLabel(en, DateTime(2027, 3, 14, 14, 2), now: DateTime(2027, 3, 15, 10)),
+      expect(label24(en, DateTime(2027, 3, 14, 14, 2), now: DateTime(2027, 3, 15, 10)),
           en.timeYesterday('14:02'));
-      expect(dayTimeLabel(en, DateTime(2027, 3, 15, 1), now: DateTime(2027, 3, 13, 23)),
+      expect(label24(en, DateTime(2027, 3, 15, 1), now: DateTime(2027, 3, 13, 23)),
           '03-15 01:00');
-      expect(dayTimeLabel(en, DateTime(2027, 3, 14, 9, 5), now: DateTime(2027, 3, 14, 23)),
+      expect(label24(en, DateTime(2027, 3, 14, 9, 5), now: DateTime(2027, 3, 14, 23)),
           en.timeToday('09:05'));
     });
   });
@@ -443,19 +450,19 @@ void main() {
   // Teeth under a US or EU zone; in UTC (CI) these days are ordinary.
   test('the day label counts CALENDAR days, also across a DST change', () {
     final now = DateTime(2026, 7, 17, 9);
-    expect(dayTimeLabel(en, DateTime(2026, 7, 17, 21, 30), now: now),
+    expect(label24(en, DateTime(2026, 7, 17, 21, 30), now: now),
         'Today 21:30');
-    expect(dayTimeLabel(en, DateTime(2026, 7, 18, 7), now: now),
+    expect(label24(en, DateTime(2026, 7, 18, 7), now: now),
         'Tomorrow 07:00');
-    expect(dayTimeLabel(en, DateTime(2026, 7, 16, 14, 2), now: now),
+    expect(label24(en, DateTime(2026, 7, 16, 14, 2), now: now),
         'Yesterday 14:02');
-    expect(dayTimeLabel(en, DateTime(2026, 7, 15, 14, 2), now: now),
+    expect(label24(en, DateTime(2026, 7, 15, 14, 2), now: now),
         '07-15 14:02');
-    expect(dayTimeLabel(en, DateTime(2026, 7, 19, 7), now: now), '07-19 07:00');
-    expect(dayTimeLabel(zh, DateTime(2026, 7, 18, 7), now: now), '明天 07:00');
+    expect(label24(en, DateTime(2026, 7, 19, 7), now: now), '07-19 07:00');
+    expect(label24(zh, DateTime(2026, 7, 18, 7), now: now), '明天 07:00');
     // 23:59 to 00:01 is tomorrow, two minutes away.
     expect(
-        dayTimeLabel(en, DateTime(2026, 7, 18, 0, 1),
+        label24(en, DateTime(2026, 7, 18, 0, 1),
             now: DateTime(2026, 7, 17, 23, 59)),
         'Tomorrow 00:01');
 
@@ -467,13 +474,13 @@ void main() {
       DateTime at(DateTime day, int h, int m) =>
           DateTime(day.year, day.month, day.day, h, m);
       for (final hour in const [0, 3, 12, 22, 23]) {
-        expect(dayTimeLabel(en, at(next, 21, 30), now: at(starts, hour, 40)),
+        expect(label24(en, at(next, 21, 30), now: at(starts, hour, 40)),
             'Tomorrow 21:30',
             reason: 'from $starts at $hour:40');
-        expect(dayTimeLabel(en, at(starts, 14, 2), now: at(next, hour, 40)),
+        expect(label24(en, at(starts, 14, 2), now: at(next, hour, 40)),
             'Yesterday 14:02',
             reason: 'from $next at $hour:40');
-        expect(dayTimeLabel(en, at(starts, 21, 30), now: at(starts, hour, 40)),
+        expect(label24(en, at(starts, 21, 30), now: at(starts, hour, 40)),
             'Today 21:30');
       }
     }

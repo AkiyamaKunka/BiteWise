@@ -13,7 +13,8 @@ import '../core/coerce.dart' show calendarDaysBetween;
 import '../core/outcome_kind.dart';
 import '../l10n/app_localizations.dart';
 import '../services/assist/meal_assist.dart' show AssistAppliedNotice;
-import 'format.dart' show formatKcal, mealDescription;
+import 'format.dart'
+    show englishClock, formatKcal, mealDescription, phoneUses24HourClock;
 import 'photo_pipeline.dart';
 import 'provider_names.dart';
 
@@ -317,11 +318,19 @@ String badModelText(AppLocalizations l, String? message) {
 int calendarDayDiff(DateTime from, DateTime to) =>
     calendarDaysBetween(from, to);
 
-/// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
-/// [now] is a test seam.
-String dayTimeLabel(AppLocalizations l, DateTime when, {DateTime? now}) {
-  final hhmm = '${when.hour.toString().padLeft(2, '0')}:'
-      '${when.minute.toString().padLeft(2, '0')}';
+/// "Today 9:30 PM" / "Tomorrow 7:00 AM" / "Yesterday 2:02 PM" /
+/// "09-28 2:02 PM", or "Today 21:30" ... on a 24-hour phone: English
+/// follows the phone's 12/24-hour setting ([use24h] overrides it), as
+/// Report Time beside it does (it was always 24-hour: 'Report Time 9:30
+/// PM' above 'Next summary Today 21:30'); Chinese is 24-hour either way.
+/// [now] is a test seam. Callers pass nothing new: the phone's setting is
+/// read here, so Settings, the backup status, the add flow's quota pause
+/// and the background notice all follow it.
+String dayTimeLabel(AppLocalizations l, DateTime when,
+    {DateTime? now, bool? use24h}) {
+  final hhmm = englishClock(when.hour, when.minute,
+      use24h: l.localeName.startsWith('zh') ||
+          (use24h ?? phoneUses24HourClock()));
   // CALENDAR days apart (calendarDaysBetween), not the hours between two
   // local midnights: those are 23 on the day DST starts, which read as 0
   // days — tomorrow's slot said "Today" all that day, and yesterday's run

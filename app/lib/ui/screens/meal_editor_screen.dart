@@ -70,6 +70,7 @@ import '../../services/photo/glasses.dart'
     show captureAnalysis, isMetaGlassesAnalysis;
 import '../../services/usual/usual_foods.dart';
 import '../assist_lookup_text.dart';
+import '../app_formats.dart';
 import '../assist_view.dart';
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
@@ -87,6 +88,7 @@ import '../widgets/restaurant_consent_sheet.dart'
 import '../widgets/macro_chart.dart';
 import '../widgets/small_spinner.dart';
 import '../theme/app_theme.dart' show AppButtonStyles;
+import '../widgets/discard_guard.dart';
 import '../widgets/pickers.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
@@ -230,6 +232,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// text edit that changes it rebuilds, so the cards' buttons wait.
   bool _shownDirty = false;
 
+  /// Whether the last build held back for unsaved changes ([_unsaved]): a
+  /// text edit that changes it rebuilds, so a back gesture asks first.
+  bool _shownUnsaved = false;
+
   /// The usual numbers offered for [_meal] (never stored), the meal they
   /// were worked out for, and the reply that may still set them.
   UsualOffer? _usualOffer;
@@ -293,11 +299,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     // Live macro chart: rebuild as the user types.
     for (final c in [_cal, _pro, _carb, _fat]) {
       c.addListener(_syncTotals);
+      c.addListener(_watchDirty);
     }
     _meal = meal;
+    // What the form opened with, a new meal's included: a back gesture
+    // asks before it drops anything typed since ([_unsaved]).
+    _loadedSignature = _signature();
     if (meal != null) {
       _hold = widget.inUse?.acquire(meal.id);
-      _loadedSignature = _signature();
       _readBasis();
       widget.mealsChanged?.addListener(_onMealsChanged);
       // Opened: the card's 'updated' dot goes (design R7b).
@@ -344,10 +353,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   }
 
   /// A text edit that makes the form dirty (or clean again) rebuilds it:
-  /// the cards' buttons wait while there is unsaved typing.
+  /// the cards' buttons wait while there is unsaved typing, and a back
+  /// gesture asks before it drops it.
   void _watchDirty() {
     if (_loading || !mounted) return;
-    if (_dirty != _shownDirty) setState(() {});
+    if (_dirty != _shownDirty || _unsaved != _shownUnsaved) setState(() {});
   }
 
   /// A copy of [analysis] without the assist block, published flags and
@@ -474,6 +484,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     // so a deleted or corrected row can never leave a stale total.
     for (final c in [row.cal, row.pro, row.carb, row.fat]) {
       c.addListener(_recomputeTotalsFromItems);
+      // An edit that leaves the total as it was ('0100' for '100') still
+      // counts as typing for the back question.
+      c.addListener(_watchDirty);
     }
     return row;
   }
@@ -570,11 +583,13 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     // form — the user pressed Save on what they saw — it is a conflict.
     final basis = _basisRead;
     if (basis != null) {
-      _saving = true; // also the re-entry guard
+      // Also the re-entry guard, and built: a back gesture meanwhile is a
+      // save under way, not a question (DiscardChangesGuard busy).
+      setState(() => _saving = true);
       try {
         await basis;
       } finally {
-        _saving = false;
+        if (mounted) setState(() => _saving = false);
       }
       if (!mounted) return;
     }
@@ -751,6 +766,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   /// The form shows something the user typed since the last load.
   bool get _dirty => _meal != null && _signature() != _loadedSignature;
+
+  /// Like [_dirty], for a new meal too (manual entry, a describe preview,
+  /// a refused photo): something typed or picked since the editor opened
+  /// or last loaded. A back gesture asks before it drops that.
+  bool get _unsaved => _signature() != _loadedSignature;
 
   /// One of the cards' own writes is running: a lookup the user started
   /// (polled for up to [kAssistPollWindow] on the owner's server), an
@@ -1313,223 +1333,233 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             0;
     final assistCard = _assistSection();
     _shownDirty = _dirty;
+    _shownUnsaved = _unsaved;
     final locked = _formLocked;
     final usualCard = _usualSection(_shownDirty);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isNew
-            ? context.l10n.editorTitleAdd
-            : context.l10n.editorTitleEdit),
-        actions: [
-          if (!widget.isNew)
-            IconButton(
-              key: const Key('deleteMealButton'),
-              tooltip: context.l10n.editorDeleteTooltip,
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _saving ? null : _delete,
-            ),
-        ],
-      ),
-      body: ListView(
-        controller: _scroll,
-        // Room for the first field's floated label at large text: it was
-        // clipped under the app bar at AX5.
-        padding: EdgeInsets.fromLTRB(16, _gapAboveField(context, 8), 16, 96),
-        children: [
-          if (_errors.isNotEmpty)
-            Card(
-              key: const Key('editorErrors'),
-              color: theme.colorScheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (final e in _errors)
-                      Text(e,
-                          style: TextStyle(
-                              color: theme.colorScheme.onErrorContainer)),
-                  ],
+    // Back asks first while something is unsaved; Save, Delete and the
+    // conflict paths pop with Navigator.pop, which is never held.
+    return DiscardChangesGuard(
+      dirty: _shownUnsaved,
+      busy: _saving,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.isNew
+              ? context.l10n.editorTitleAdd
+              : context.l10n.editorTitleEdit),
+          actions: [
+            if (!widget.isNew)
+              IconButton(
+                key: const Key('deleteMealButton'),
+                tooltip: context.l10n.editorDeleteTooltip,
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _saving ? null : _delete,
+              ),
+          ],
+        ),
+        body: ListView(
+          controller: _scroll,
+          // Room for the first field's floated label at large text: it was
+          // clipped under the app bar at AX5.
+          padding: EdgeInsets.fromLTRB(16, _gapAboveField(context, 8), 16, 96),
+          children: [
+            if (_errors.isNotEmpty)
+              Card(
+                key: const Key('editorErrors'),
+                color: theme.colorScheme.errorContainer,
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final e in _errors)
+                        Text(e,
+                            style: TextStyle(
+                                color: theme.colorScheme.onErrorContainer)),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          if (_fromMetaGlasses)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 12),
-              child: Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: MetaGlassesBadge(key: Key('editorMetaGlassesBadge')),
+            if (_fromMetaGlasses)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12),
+                child: Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: MetaGlassesBadge(key: Key('editorMetaGlassesBadge')),
+                ),
+              ),
+            // The card right above the description leaves room for its
+            // floated label at large text: 16 pt let it cover the card's
+            // bottom edge at AX5. Unchanged at the default size.
+            if (assistCard != null)
+              Padding(
+                padding: EdgeInsets.only(
+                    bottom: usualCard == null ? _gapAboveField(context, 16) : 16),
+                child: assistCard,
+              ),
+            if (usualCard != null)
+              Padding(
+                padding: EdgeInsets.only(bottom: _gapAboveField(context, 16)),
+                child: usualCard,
+              ),
+            TextField(
+              key: const Key('editorDescription'),
+              controller: _desc,
+              readOnly: locked,
+              textCapitalization: TextCapitalization.sentences,
+              // Wraps at large text ('Pan-fried du' at AX5); still one line
+              // of content with a Done key.
+              maxLines: isLargeText(context) ? null : 1,
+              keyboardType: TextInputType.text,
+              textInputAction: TextInputAction.done,
+              inputFormatters: [FilteringTextInputFormatter.singleLineFormatter],
+              decoration: InputDecoration(
+                labelText: context.l10n.editorDescriptionLabel,
+                border: const OutlineInputBorder(),
               ),
             ),
-          // The card right above the description leaves room for its
-          // floated label at large text: 16 pt let it cover the card's
-          // bottom edge at AX5. Unchanged at the default size.
-          if (assistCard != null)
-            Padding(
-              padding: EdgeInsets.only(
-                  bottom: usualCard == null ? _gapAboveField(context, 16) : 16),
-              child: assistCard,
+            const SizedBox(height: 12),
+            // At large text the two pills stack: side by side, the date
+            // wrapped onto two lines.
+            _fieldGrid(
+              perRow: isLargeText(context) ? 1 : 2,
+              gap: 8,
+              [
+                OutlinedButton.icon(
+                  key: const Key('editorDateButton'),
+                  onPressed: locked ? null : _pickDate,
+                  icon: const Icon(Icons.event_outlined, size: 18),
+                  // 'Jul 24' / '7月24日', with the year when it is not
+                  // this year's (the raw '2026-07-24' read as a code).
+                  label: Text(AppFormats.shortDate(context, _draft.dateIso,
+                      now: (widget.now ?? DateTime.now)())),
+                ),
+                OutlinedButton.icon(
+                  key: const Key('editorTimeButton'),
+                  onPressed: locked ? null : _pickTime,
+                  icon: const Icon(Icons.schedule_outlined, size: 18),
+                  // Locale clock (24h in zh), like every other time in the UI.
+                  label: Text(context.clock(_draft.time)),
+                ),
+              ],
             ),
-          if (usualCard != null)
-            Padding(
-              padding: EdgeInsets.only(bottom: _gapAboveField(context, 16)),
-              child: usualCard,
+            const SizedBox(height: 20),
+            Text(context.l10n.editorTotalsHeader, style: theme.textTheme.titleSmall),
+            SizedBox(height: _gapAboveField(context, 8)),
+            // Bare name + unit suffix, like the macro fields below: at the
+            // largest iOS text size a NEW meal's empty field rested
+            // 'Calories (kcal)' at the full 3.1x and cut it to 'Calories (kc…'
+            // until tapped (a filled meal floats the label at 0.75x and fits).
+            _NumberField(
+              fieldKey: const Key('editorCalories'),
+              controller: _cal,
+              readOnly: locked,
+              label: context.l10n.editorCaloriesLabel,
+              suffixText: context.l10n.editorKcalSuffix,
             ),
-          TextField(
-            key: const Key('editorDescription'),
-            controller: _desc,
-            readOnly: locked,
-            textCapitalization: TextCapitalization.sentences,
-            // Wraps at large text ('Pan-fried du' at AX5); still one line
-            // of content with a Done key.
-            maxLines: isLargeText(context) ? null : 1,
-            keyboardType: TextInputType.text,
-            textInputAction: TextInputAction.done,
-            inputFormatters: [FilteringTextInputFormatter.singleLineFormatter],
-            decoration: InputDecoration(
-              labelText: context.l10n.editorDescriptionLabel,
-              border: const OutlineInputBorder(),
+            SizedBox(height: _gapAboveField(context, 8)),
+            // At large text each macro field takes the full width, like
+            // Calories: a third of the row cut 'Protein (g)' / '蛋白质（克）'
+            // to 'Pr…'. At the default size a NEW meal's empty fields rest
+            // their labels inside that third, and on a 375–411 pt phone
+            // 'Protein (g)' / '蛋白质（克）' (and even '蛋白（克）') still cut,
+            // so the label is the bare name and the unit is a suffix — shown
+            // once the field is focused or filled, i.e. once the label has
+            // floated, so the unit is never out of sight while typing.
+            _fieldGrid(
+              perRow: isLargeText(context) ? 1 : 3,
+              gap: 8,
+              runGap: _gapAboveField(context, 8),
+              [
+                _NumberField(
+                    fieldKey: const Key('editorProtein'),
+                    controller: _pro,
+                    readOnly: locked,
+                    label: context.l10n.editorProteinLabel,
+                    suffixText: context.l10n.editorGramsSuffix),
+                _NumberField(
+                    fieldKey: const Key('editorCarbs'),
+                    controller: _carb,
+                    readOnly: locked,
+                    label: context.l10n.editorCarbsLabel,
+                    suffixText: context.l10n.editorGramsSuffix),
+                _NumberField(
+                    fieldKey: const Key('editorFat'),
+                    controller: _fat,
+                    readOnly: locked,
+                    label: context.l10n.editorFatLabel,
+                    suffixText: context.l10n.editorGramsSuffix),
+              ],
             ),
-          ),
-          const SizedBox(height: 12),
-          // At large text the two pills stack: side by side, the date
-          // wrapped onto two lines.
-          _fieldGrid(
-            perRow: isLargeText(context) ? 1 : 2,
-            gap: 8,
-            [
-              OutlinedButton.icon(
-                key: const Key('editorDateButton'),
-                onPressed: locked ? null : _pickDate,
-                icon: const Icon(Icons.event_outlined, size: 18),
-                label: Text(_draft.dateIso),
+            const SizedBox(height: 16),
+            // Live composition of what's typed above.
+            Text('~${context.l10n.kcalAmount(formatKcal(kcalNow))}',
+                style: theme.textTheme.titleMedium),
+            const SizedBox(height: 8),
+            MacroBreakdownBar(
+              proteinG: _num(_pro.text),
+              carbsG: _num(_carb.text),
+              fatG: _num(_fat.text),
+            ),
+            const SizedBox(height: 24),
+            // A Wrap, not a Row: the unflexed hint took the whole width at
+            // the largest text sizes, drawing 'Items' one glyph per line and
+            // overflowing the row. Side by side when both fit, the hint drops
+            // under the header (and wraps there) when they don't.
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 2,
+              children: [
+                Text(context.l10n.editorItemsHeader,
+                    style: theme.textTheme.titleSmall),
+                if (_totalsDerived)
+                  Text(context.l10n.editorTotalsDerivedHint,
+                      key: const Key('totalsDerivedHint'),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ],
+            ),
+            for (var i = 0; i < _draft.items.length; i++)
+              _ItemRow(
+                // Identity key: element (and focus) state must travel WITH the
+                // item when a row above it is removed. Without it, removing a
+                // row left the keyboard bound to the next item's controller
+                // and silently typed into the wrong food.
+                key: ObjectKey(_draft.items[i]),
+                index: i,
+                ctrls: _itemCtrls[i],
+                locked: locked,
+                onRemove: () => _removeItem(_draft.items[i]),
               ),
-              OutlinedButton.icon(
-                key: const Key('editorTimeButton'),
-                onPressed: locked ? null : _pickTime,
-                icon: const Icon(Icons.schedule_outlined, size: 18),
-                // Locale clock (24h in zh), like every other time in the UI.
-                label: Text(context.clock(_draft.time)),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                key: const Key('addItemRow'),
+                onPressed: locked ? null : () {
+                  _harvest();
+                  setState(() {
+                    // The first row is seeded from the hand-typed totals
+                    // (MealDraft.addItem), so the recompute below reproduces
+                    // them instead of wiping them.
+                    _itemCtrls.add(_controllersFor(_draft.addItem()));
+                  });
+                  _recomputeTotalsFromItems();
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: Text(context.l10n.editorAddItem),
               ),
-            ],
-          ),
-          const SizedBox(height: 20),
-          Text(context.l10n.editorTotalsHeader, style: theme.textTheme.titleSmall),
-          SizedBox(height: _gapAboveField(context, 8)),
-          // Bare name + unit suffix, like the macro fields below: at the
-          // largest iOS text size a NEW meal's empty field rested
-          // 'Calories (kcal)' at the full 3.1x and cut it to 'Calories (kc…'
-          // until tapped (a filled meal floats the label at 0.75x and fits).
-          _NumberField(
-            fieldKey: const Key('editorCalories'),
-            controller: _cal,
-            readOnly: locked,
-            label: context.l10n.editorCaloriesLabel,
-            suffixText: context.l10n.editorKcalSuffix,
-          ),
-          SizedBox(height: _gapAboveField(context, 8)),
-          // At large text each macro field takes the full width, like
-          // Calories: a third of the row cut 'Protein (g)' / '蛋白质（克）'
-          // to 'Pr…'. At the default size a NEW meal's empty fields rest
-          // their labels inside that third, and on a 375–411 pt phone
-          // 'Protein (g)' / '蛋白质（克）' (and even '蛋白（克）') still cut,
-          // so the label is the bare name and the unit is a suffix — shown
-          // once the field is focused or filled, i.e. once the label has
-          // floated, so the unit is never out of sight while typing.
-          _fieldGrid(
-            perRow: isLargeText(context) ? 1 : 3,
-            gap: 8,
-            runGap: _gapAboveField(context, 8),
-            [
-              _NumberField(
-                  fieldKey: const Key('editorProtein'),
-                  controller: _pro,
-                  readOnly: locked,
-                  label: context.l10n.editorProteinLabel,
-                  suffixText: context.l10n.editorGramsSuffix),
-              _NumberField(
-                  fieldKey: const Key('editorCarbs'),
-                  controller: _carb,
-                  readOnly: locked,
-                  label: context.l10n.editorCarbsLabel,
-                  suffixText: context.l10n.editorGramsSuffix),
-              _NumberField(
-                  fieldKey: const Key('editorFat'),
-                  controller: _fat,
-                  readOnly: locked,
-                  label: context.l10n.editorFatLabel,
-                  suffixText: context.l10n.editorGramsSuffix),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Live composition of what's typed above.
-          Text('~${context.l10n.kcalAmount(formatKcal(kcalNow))}',
-              style: theme.textTheme.titleMedium),
-          const SizedBox(height: 8),
-          MacroBreakdownBar(
-            proteinG: _num(_pro.text),
-            carbsG: _num(_carb.text),
-            fatG: _num(_fat.text),
-          ),
-          const SizedBox(height: 24),
-          // A Wrap, not a Row: the unflexed hint took the whole width at
-          // the largest text sizes, drawing 'Items' one glyph per line and
-          // overflowing the row. Side by side when both fit, the hint drops
-          // under the header (and wraps there) when they don't.
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 2,
-            children: [
-              Text(context.l10n.editorItemsHeader,
-                  style: theme.textTheme.titleSmall),
-              if (_totalsDerived)
-                Text(context.l10n.editorTotalsDerivedHint,
-                    key: const Key('totalsDerivedHint'),
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ],
-          ),
-          for (var i = 0; i < _draft.items.length; i++)
-            _ItemRow(
-              // Identity key: element (and focus) state must travel WITH the
-              // item when a row above it is removed. Without it, removing a
-              // row left the keyboard bound to the next item's controller
-              // and silently typed into the wrong food.
-              key: ObjectKey(_draft.items[i]),
-              index: i,
-              ctrls: _itemCtrls[i],
-              locked: locked,
-              onRemove: () => _removeItem(_draft.items[i]),
             ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              key: const Key('addItemRow'),
-              onPressed: locked ? null : () {
-                _harvest();
-                setState(() {
-                  // The first row is seeded from the hand-typed totals
-                  // (MealDraft.addItem), so the recompute below reproduces
-                  // them instead of wiping them.
-                  _itemCtrls.add(_controllersFor(_draft.addItem()));
-                });
-                _recomputeTotalsFromItems();
-              },
-              icon: const Icon(Icons.add, size: 18),
-              label: Text(context.l10n.editorAddItem),
-            ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('saveMealButton'),
-        onPressed: _saving ? null : _save,
-        icon: _saving
-            ? const SmallSpinner(size: 18)
-            : const Icon(Icons.check),
-        label: Text(widget.isNew ? context.l10n.editorAdd : context.l10n.save),
+          ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          key: const Key('saveMealButton'),
+          onPressed: _saving ? null : _save,
+          icon: _saving
+              ? const SmallSpinner(size: 18)
+              : const Icon(Icons.check),
+          label: Text(widget.isNew ? context.l10n.editorAdd : context.l10n.save),
+        ),
       ),
     );
   }

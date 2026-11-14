@@ -7,7 +7,9 @@
 /// raw '21:30' in Settings next to '09:30 PM' meal times, and nothing
 /// honoured the device's 24-Hour Time switch.
 ///
-/// Meal times keep `context.clock` (tests pin its format).
+/// Meal times keep `context.clock` (format.dart displayClock), which since
+/// the Android push follows the same 24-Hour Time switch: '4:56 AM' or
+/// '04:56' in English, 24-hour in Chinese.
 library;
 
 import 'package:flutter/material.dart';
