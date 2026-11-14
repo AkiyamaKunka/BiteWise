@@ -3289,4 +3289,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagFixServerHttps => '先为服务器配置 https，再到设置里把服务器地址改成 https://…。';
+
+  @override
+  String shareConsentDeclinedMany(int count) {
+    return '$count 张分享的照片没有分析 — 没有发送任何内容。';
+  }
 }

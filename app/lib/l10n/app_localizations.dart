@@ -5518,6 +5518,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Set up https on your server, then change the server address to https://… in Settings.'**
   String get diagFixServerHttps;
+
+  /// Snackbar after Not now on the AI consent question for a share of several photos: one Not now covers every photo of that share (and any shared before the answer). count is 2 or more; one photo uses shareConsentDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} shared photos were not analyzed — nothing was sent.'**
+  String shareConsentDeclinedMany(int count);
 }
 
 class _AppLocalizationsDelegate

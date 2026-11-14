@@ -1017,5 +1017,6 @@
   "errServerNeedsHttps": "你的服务器地址不是以 https:// 开头的 —— 筷拍不会向它发送任何内容。请在设置里把它改成 https:// 地址。",
   "reasonServerNeedsHttps": "服务器地址需要 https://",
   "diagServerNeedsHttps": "服务器地址不是以 https:// 开头的，所以不会向它发送任何内容。",
-  "diagFixServerHttps": "先为服务器配置 https，再到设置里把服务器地址改成 https://…。"
+  "diagFixServerHttps": "先为服务器配置 https，再到设置里把服务器地址改成 https://…。",
+  "shareConsentDeclinedMany": "{count} 张分享的照片没有分析 — 没有发送任何内容。"
 }

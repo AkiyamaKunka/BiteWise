@@ -792,6 +792,227 @@ void main() {
     });
   });
 
+  // One Not now per share (an-bugs 'PROBE consent'): a 5-photo Android
+  // share answered Not now asked five times. Now the answer covers every
+  // photo that arrived before it — dropped unasked, never sent — and one
+  // line says how many; a share after the answer asks again.
+  group('one Not now per share', () {
+    test('a 5-photo share: one question, nothing passes, a later share '
+        'asks again', () async {
+      final settings = _unasked();
+      final gate = SharedPhotoConsentGate(settings);
+      final input = StreamController<IntakePhoto>();
+      final passed = <String>[];
+      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+      final notSent = <int>[];
+      var asked = 0;
+      final answers = [false, true];
+      // The user reads the question: the rest of the share is in by the
+      // time they answer (the test answers each one).
+      var reading = Completer<void>();
+      Future<bool> ask() async {
+        final yes = answers[asked++];
+        await reading.future;
+        reading = Completer<void>();
+        if (yes) {
+          await settings.setAiConsent('gemini', granted: true);
+        } else {
+          // What askSharedPhotoConsent does at the answer.
+          notSent.add(gate.declineOpenQuestion());
+        }
+        return yes;
+      }
+
+      gate.attach(ask);
+      for (var i = 1; i <= 5; i++) {
+        input.add(_photo('share1-$i'));
+      }
+      await pumpEventQueue();
+      expect(asked, 1);
+      reading.complete(); // Not now
+      await pumpEventQueue();
+      expect(asked, 1, reason: 'one question for the whole share');
+      expect(passed, isEmpty, reason: 'none of the five is sent');
+      expect(notSent, [5]);
+
+      input.add(_photo('share2-1'));
+      input.add(_photo('share2-2'));
+      await pumpEventQueue();
+      expect(asked, 2, reason: 'a share after the answer asks again');
+      reading.complete(); // Allow
+      await pumpEventQueue();
+      expect(passed, ['share2-1', 'share2-2']);
+      gate.detach(ask);
+      await sub.cancel();
+      await input.close();
+    });
+
+    test('photos that arrive while the question is open are covered by its '
+        'Not now', () async {
+      final settings = _unasked();
+      final gate = SharedPhotoConsentGate(settings);
+      final input = StreamController<IntakePhoto>();
+      final passed = <String>[];
+      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+      final open = Completer<bool>();
+      var asked = 0;
+      final notSent = <int>[];
+      Future<bool> ask() async {
+        asked++;
+        if (asked > 1) return false;
+        final yes = await open.future;
+        if (!yes) notSent.add(gate.declineOpenQuestion());
+        return yes;
+      }
+
+      gate.attach(ask);
+      input.add(_photo('a'));
+      await pumpEventQueue();
+      expect(asked, 1);
+      // Still open: two more arrive (the rest of the share, or another).
+      input.add(_photo('b'));
+      input.add(_photo('c'));
+      await pumpEventQueue();
+      open.complete(false);
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(notSent, [3]);
+      expect(passed, isEmpty);
+      gate.detach(ask);
+      await sub.cancel();
+      await input.close();
+    });
+
+    test('a covered photo is dropped even if the recipient is allowed '
+        'before its turn', () async {
+      final settings = _unasked();
+      final gate = SharedPhotoConsentGate(settings);
+      final input = StreamController<IntakePhoto>();
+      final passed = <String>[];
+      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+      final reading = Completer<void>();
+      Future<bool> ask() async {
+        await reading.future; // the user reads the question
+        gate.declineOpenQuestion();
+        // Allowed some other way right after the Not now (Settings).
+        await settings.setAiConsent('gemini', granted: true);
+        return false;
+      }
+
+      gate.attach(ask);
+      input.add(_photo('x1'));
+      input.add(_photo('x2'));
+      await pumpEventQueue();
+      reading.complete();
+      await pumpEventQueue();
+      expect(passed, isEmpty, reason: 'the answer for them was no');
+      input.add(_photo('later'));
+      await pumpEventQueue();
+      expect(passed, ['later'], reason: 'allowed now, and it came after');
+      gate.detach(ask);
+      await sub.cancel();
+      await input.close();
+    });
+
+    test('a cold-start share waits for the shell; one Not now, even with no '
+        'dialog shown, covers all of it', () async {
+      final settings = _unasked();
+      final gate = SharedPhotoConsentGate(settings);
+      final input = StreamController<IntakePhoto>();
+      final passed = <String>[];
+      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+      for (final id in ['p1', 'p2', 'p3']) {
+        input.add(_photo(id));
+      }
+      await pumpEventQueue();
+      var asked = 0;
+      // The shell answers false without a dialog (it is going away).
+      Future<bool> ask() async {
+        asked++;
+        return false;
+      }
+
+      gate.attach(ask);
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(passed, isEmpty);
+      gate.detach(ask);
+      await sub.cancel();
+      await input.close();
+    });
+
+    test('Allow on a several-photo share: one question, every photo passes, '
+        'in order', () async {
+      final settings = _unasked();
+      final gate = SharedPhotoConsentGate(settings);
+      final input = StreamController<IntakePhoto>();
+      final passed = <String>[];
+      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      gate.attach(ask);
+      for (final id in ['a1', 'a2', 'a3', 'a4']) {
+        input.add(_photo(id));
+      }
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(passed, ['a1', 'a2', 'a3', 'a4']);
+      gate.detach(ask);
+      await sub.cancel();
+      await input.close();
+    });
+
+    for (final (locale, line) in [
+      (const Locale('en'),
+          '5 shared photos were not analyzed — nothing was sent.'),
+      (const Locale('zh'), '5 张分享的照片没有分析 — 没有发送任何内容。'),
+    ]) {
+      testWidgets('the app shell: one dialog for a 5-photo share, one line '
+          'with the count (${locale.languageCode})', (tester) async {
+        final settings = _unasked();
+        final gate = SharedPhotoConsentGate(settings);
+        final input = StreamController<IntakePhoto>();
+        final passed = <String>[];
+        final sub =
+            gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+        final services = UiServices(
+          dao: FakeDao(),
+          analyzer: FakeAnalyzer(),
+          executor: FakeExecutor(),
+          settings: settings,
+          picker: FakePicker(),
+          requestPhotoPermission: () async => true,
+          sharedPhotoConsent: gate,
+        );
+        await tester.pumpWidget(
+            _app(HomeShell(services: services), locale: locale));
+        await tester.pumpAndSettle();
+
+        for (var i = 1; i <= 5; i++) {
+          input.add(_photo('s$i'));
+        }
+        await tester.pumpAndSettle();
+        expect(_dialog, findsOneWidget);
+        await _notNow(tester);
+        expect(_dialog, findsNothing, reason: 'not asked again for s2..s5');
+        expect(passed, isEmpty);
+        expect(find.text(line), findsOneWidget);
+
+        input.add(_photo('next'));
+        await tester.pumpAndSettle();
+        expect(_dialog, findsOneWidget, reason: 'a later share asks again');
+        await _allow(tester);
+        expect(passed, ['next']);
+        unawaited(sub.cancel());
+      });
+    }
+  });
+
   testWidgets('a setup link names the plan\'s company, and confirming is '
       'the consent for it', (tester) async {
     final settings = _unasked();

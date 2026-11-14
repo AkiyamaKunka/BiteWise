@@ -22,6 +22,7 @@ import 'ai_consent.dart'
         aiConsentCompanyName,
         aiConsentUpdateNeeded,
         askAiConsentUpdate,
+        askSharedPhotoConsent,
         ensureAiConsent;
 import 'background_glue.dart' show foregroundCatchUp;
 import 'backup_sheets.dart';
@@ -252,6 +253,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// that the shared photo was not analyzed.
   Future<bool> _askShareConsent() async {
     if (!mounted) return false;
+    final gate = widget.services.sharedPhotoConsent;
+    // One question per share: Not now covers the photos already in
+    // (askSharedPhotoConsent).
+    if (gate != null) {
+      return askSharedPhotoConsent(context, widget.services.settings, gate);
+    }
     return ensureAiConsent(context, widget.services.settings,
         declined: context.l10n.shareConsentDeclined);
   }

@@ -15,6 +15,11 @@
 /// since the current recipient was allowed ([askAiConsentUpdate]); the
 /// newly described data waits for that Allow.
 ///
+/// A share of several photos is ONE question: Not now covers every
+/// shared photo that arrived before that answer, dropped without being
+/// asked about or sent, and one line says how many were not sent
+/// ([askSharedPhotoConsent]). A share after the answer asks again.
+///
 /// These are the questions. Every automatic send already needs the
 /// watcher, and the watcher only runs for a consented recipient; the photo
 /// pipeline reads the answer once more at each send (photo_pipeline.dart
@@ -154,9 +159,11 @@ Future<bool> showAiConsentDialog(
 
 /// Before a FOREGROUND send: true = go ahead (already allowed, nothing can
 /// be sent yet, or the user just allowed it — which is saved). Not now
-/// shows [declined] (default: "Nothing was sent.") and returns false.
+/// shows [declined] (default: "Nothing was sent.") and returns false;
+/// [declinedAtAnswer], when given, words that line instead, read at the
+/// moment of the answer.
 Future<bool> ensureAiConsent(BuildContext context, SettingsStore settings,
-    {String? declined}) async {
+    {String? declined, String Function()? declinedAtAnswer}) async {
   if (!aiConsentNeeded(settings)) return true;
   final route = currentAiConsentRoute(settings);
   final messenger = ScaffoldMessenger.maybeOf(context);
@@ -169,8 +176,26 @@ Future<bool> ensureAiConsent(BuildContext context, SettingsStore settings,
     await settings.setAiConsent(route, granted: true);
     return true;
   }
-  messenger?.showSnackBar(SnackBar(content: Text(declinedText)));
+  messenger?.showSnackBar(SnackBar(
+      content: Text(declinedAtAnswer?.call() ?? declinedText)));
   return false;
+}
+
+/// The app shell's question for a photo shared into the app
+/// ([SharedPhotoConsentGate.attach]). Not now covers the rest of that
+/// share: the gate drops, without asking or sending, every shared photo
+/// that arrived before the answer, and the one line says how many were
+/// not sent — the asked photo and those ([SharedPhotoConsentGate
+/// .declineOpenQuestion]).
+Future<bool> askSharedPhotoConsent(BuildContext context,
+    SettingsStore settings, SharedPhotoConsentGate gate) {
+  final l = context.l10n;
+  return ensureAiConsent(context, settings, declinedAtAnswer: () {
+    final notSent = gate.declineOpenQuestion();
+    return notSent > 1
+        ? l.shareConsentDeclinedMany(notSent)
+        : l.shareConsentDeclined;
+  });
 }
 
 /// A provider or plan choice that would change the recipient. With Watch
@@ -256,12 +281,35 @@ Future<bool> askAiConsentUpdate(
 /// dialog ([attach]) asks, and Not now drops the photo (its container copy
 /// is already deleted by the share intake). Photos keep their order: the
 /// stream waits while a question is open.
+///
+/// One Not now per share: a 5-photo share answered Not now used to ask
+/// five times. Each photo is numbered as it ARRIVES (before it waits for
+/// a question), and a Not now covers every photo that arrived before the
+/// answer: those are dropped without a question and never sent — even if
+/// the recipient is allowed some other way meanwhile, since the user's
+/// answer for them was no. A photo that arrives after the answer is asked
+/// about again.
 class SharedPhotoConsentGate {
   SharedPhotoConsentGate(this._settings);
 
   final SettingsStore _settings;
   Future<bool> Function()? _ask;
   Completer<void> _attached = Completer<void>();
+
+  /// How many shared photos have arrived: each one's number, given as it
+  /// arrives.
+  int _arrived = 0;
+
+  /// Every photo numbered up to this is covered by a Not now.
+  int _declinedThrough = 0;
+
+  /// The number of the photo the open question is about; null when none
+  /// is open.
+  int? _asking;
+
+  /// Whether [declineOpenQuestion] already marked the open question's
+  /// answer.
+  bool _declineMarked = false;
 
   /// The app shell's dialog, once it has a navigator; true = allowed (and
   /// recorded). A cold-start share arrives before the first frame and
@@ -278,13 +326,44 @@ class SharedPhotoConsentGate {
     _attached = Completer<void>();
   }
 
-  Stream<IntakePhoto> gate(Stream<IntakePhoto> photos) => photos
-      .asyncMap(_admit)
-      .where((p) => p != null)
-      .cast<IntakePhoto>();
+  /// The open question was answered Not now: marks every shared photo
+  /// that has arrived by now as covered by that answer, and returns how
+  /// many shared photos the answer leaves unsent — the asked one and every
+  /// one that arrived after it. 1 when no question is open.
+  int declineOpenQuestion() {
+    final asking = _asking;
+    if (asking == null) return 1;
+    _declineMarked = true;
+    if (_arrived > _declinedThrough) _declinedThrough = _arrived;
+    return _arrived - asking + 1;
+  }
 
-  Future<IntakePhoto?> _admit(IntakePhoto photo) async {
+  /// [photos], each numbered on arrival: the subscription to [photos] is
+  /// never paused (asyncMap pauses only the numbered stream while a
+  /// question is open), so a photo's number says when it came, not when
+  /// its turn did.
+  Stream<IntakePhoto> gate(Stream<IntakePhoto> photos) {
+    StreamSubscription<IntakePhoto>? source;
+    late final StreamController<(IntakePhoto, int)> numbered;
+    numbered = StreamController<(IntakePhoto, int)>(
+      onListen: () {
+        source = photos.listen((p) => numbered.add((p, ++_arrived)),
+            onError: numbered.addError, onDone: numbered.close);
+      },
+      onCancel: () => source?.cancel(),
+    );
+    return numbered.stream
+        .asyncMap(_admit)
+        .where((p) => p != null)
+        .cast<IntakePhoto>();
+  }
+
+  Future<IntakePhoto?> _admit((IntakePhoto, int) arrival) async {
+    final (photo, number) = arrival;
     while (true) {
+      // Covered by a Not now given after it arrived: dropped unasked,
+      // and never sent.
+      if (number <= _declinedThrough) return null;
       // Re-read after every wait: the user may have allowed it meanwhile.
       if (!aiConsentNeeded(_settings)) return photo;
       final ask = _ask;
@@ -292,10 +371,18 @@ class SharedPhotoConsentGate {
         await _attached.future;
         continue;
       }
+      _asking = number;
+      _declineMarked = false;
       try {
-        return await ask() ? photo : null;
+        if (await ask()) return photo;
+        // Not now (or no dialog could be shown): the rest of the share is
+        // covered too. Marked here when the dialog's own line did not.
+        if (!_declineMarked) declineOpenQuestion();
+        return null;
       } catch (_) {
         return null; // a failed dialog is not consent
+      } finally {
+        _asking = null;
       }
     }
   }

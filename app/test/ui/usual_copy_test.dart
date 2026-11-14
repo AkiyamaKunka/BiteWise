@@ -160,9 +160,10 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
 /// (leftoverLoadFailed, leftoverSaveFailed), then the Android privacy
-/// lane's (android/privacy): ten https-only own-server lines
-/// (serverHttpConsentNote … diagFixServerHttps).
-const _keyCount = 900;
+/// lane's (android/privacy):
+/// ten https-only own-server lines (serverHttpConsentNote …
+/// diagFixServerHttps) and shareConsentDeclinedMany.
+const _keyCount = 901;
 
 Directory _appRoot() {
   var dir = Directory.current;

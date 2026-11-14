@@ -3478,5 +3478,14 @@
   "diagFixServerHttps": "Set up https on your server, then change the server address to https://… in Settings.",
   "@diagFixServerHttps": {
     "description": "Test AI provider: the fix shown under diagServerNeedsHttps."
+  },
+  "shareConsentDeclinedMany": "{count} shared photos were not analyzed — nothing was sent.",
+  "@shareConsentDeclinedMany": {
+    "description": "Snackbar after Not now on the AI consent question for a share of several photos: one Not now covers every photo of that share (and any shared before the answer). count is 2 or more; one photo uses shareConsentDeclined.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

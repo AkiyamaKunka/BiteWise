@@ -3657,4 +3657,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get diagFixServerHttps =>
       'Set up https on your server, then change the server address to https://… in Settings.';
+
+  @override
+  String shareConsentDeclinedMany(int count) {
+    return '$count shared photos were not analyzed — nothing was sent.';
+  }
 }
