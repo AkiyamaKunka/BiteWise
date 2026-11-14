@@ -1167,9 +1167,19 @@ void main() {
     expect(gradle, contains('applicationId = "$package"'));
     expect(gradle, contains('namespace = "$package"'));
     expect(gradle, isNot(contains('applicationIdSuffix')));
-    expect(gradle, isNot(contains('TODO: Specify your own unique Application ID')),
-        reason: 'the template TODO invites a change that would orphan '
-            'every installed copy');
+    for (final invite in [
+      'TODO: Specify your own unique Application ID',
+      'You can update the following values to match your application needs',
+    ]) {
+      expect(gradle, isNot(contains(invite)),
+          reason: 'the template line invites a change that would orphan '
+              'every installed copy');
+    }
+    final note = RegExp(r'\n(\s*//[^\n]*\n)+\s*applicationId = ')
+        .firstMatch(gradle)
+        ?.group(0);
+    expect(note, contains('never change applicationId'),
+        reason: 'the note above applicationId says it is permanent');
     expect(_mainActivity(), startsWith('package $package\n'));
   });
 }

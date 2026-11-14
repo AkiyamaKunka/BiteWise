@@ -69,10 +69,12 @@ android {
     }
 
     defaultConfig {
-        // Permanent: Play's app-signing key is the upload key the GitHub APKs use, one signer for both (owner, 2026-11-13).
+        // Permanent (owner, 2026-11-13): never change applicationId. A new id
+        // is a new app on Play and orphans every installed copy, whose meal
+        // log lives only on the phone. Play's app-signing key is the upload
+        // key the GitHub APKs are signed with, so both builds share it.
         applicationId = "dev.calorietracker.calorie_tracker"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Flutter's defaults: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
