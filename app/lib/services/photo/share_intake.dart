@@ -164,7 +164,7 @@ ShareIntake createShareIntake(AppSettings settings) => ShareIntake(
     readBytes: _readFileBytes,
     sharedFolder: Platform.isAndroid ? androidSharedPhotoFolder : null);
 
-class ShareIntake {
+class ShareIntake implements ShareDeliveries {
   ShareIntake(
       {required this._source,
       required this._library,
@@ -192,6 +192,28 @@ class ShareIntake {
   final DateTime Function() _clock;
   final int _capturedAtMaxAgeDays;
 
+  /// Deliveries (IntakePhoto.shareDelivery): one per batch event, numbered
+  /// as it arrives, before any of its copies is read.
+  int _deliveries = 0;
+  final Map<int, int> _deliverySize = {};
+  final Map<int, int> _deliveryUnreadable = {};
+
+  /// Deliveries up to this were declined by the consent gate: their copies
+  /// not read yet are deleted unread.
+  int _declinedThrough = 0;
+
+  @override
+  int get arrivedDelivery => _deliveries;
+
+  @override
+  int photoCountOf(int delivery) =>
+      (_deliverySize[delivery] ?? 0) - (_deliveryUnreadable[delivery] ?? 0);
+
+  @override
+  void declineThrough(int delivery) {
+    if (delivery > _declinedThrough) _declinedThrough = delivery;
+  }
+
   /// Cold-start share first, then live shares for the app's lifetime.
   /// (Explicit controller, not async*: an async* generator parked on the
   /// live-share stream would defer subscription cancellation forever.)
@@ -204,6 +226,12 @@ class ShareIntake {
   /// buffer. The copies wait in the share folder meanwhile, each in a
   /// folder of its own (MainActivity). Batches are read one after another,
   /// in order.
+  ///
+  /// DELIVERIES: each batch event is numbered as it arrives
+  /// ([ShareDeliveries], IntakePhoto.shareDelivery), so the consent gate's
+  /// Not now covers the whole share it was asked about — and any that
+  /// arrived before the answer — and their copies not read yet are deleted
+  /// here unread ([declineThrough]).
   ///
   /// iOS reads each copy the moment it arrives, as before: the share
   /// extension writes `<appGroup>/<file name>` and replaces a file of the
@@ -224,32 +252,45 @@ class ShareIntake {
       r?.complete();
     }
 
-    Future<void> emitPaths(List<String> paths) async {
+    Future<void> emitPaths(List<String> paths, int delivery) async {
+      void unreadable() => _deliveryUnreadable[delivery] =
+          (_deliveryUnreadable[delivery] ?? 0) + 1;
       for (final path in paths) {
         while (_copiesWait && controller.isPaused && !cancelled) {
           await (resumed ??= Completer<void>()).future;
         }
-        if (cancelled || controller.isClosed) {
-          // Not read, but not left in the cache either.
+        // Cancelled, or declined by the consent gate's Not now: not read,
+        // but not left in the cache either.
+        if (cancelled || controller.isClosed || delivery <= _declinedThrough) {
           await _discard(path);
           continue;
         }
         final IntakePhoto? photo;
         try {
-          photo = await _fromPath(path);
+          photo = await _fromPath(path, delivery);
         } catch (_) {
+          unreadable();
           continue; // one bad copy (already deleted) never stops the rest
         }
-        if (photo != null && !cancelled && !controller.isClosed) {
+        if (photo == null) {
+          unreadable();
+        } else if (!cancelled && !controller.isClosed) {
           controller.add(photo);
         }
       }
     }
 
     // One reader, batch after batch: a failure cannot break the chain, or
-    // every later share would wait behind it for good.
-    void enqueue(List<String> paths) => reading =
-        reading.then((_) => emitPaths(paths)).catchError((Object _) {});
+    // every later share would wait behind it for good. The delivery is
+    // numbered here, as its batch event arrives (an empty one is none).
+    void enqueue(List<String> paths) {
+      if (paths.isEmpty) return;
+      final delivery = ++_deliveries;
+      _deliverySize[delivery] = paths.length;
+      reading = reading
+          .then((_) => emitPaths(paths, delivery))
+          .catchError((Object _) {});
+    }
 
     controller = StreamController<IntakePhoto>(
       onListen: () async {
@@ -349,7 +390,7 @@ class ShareIntake {
     }
   }
 
-  Future<IntakePhoto?> _fromPath(String path) async {
+  Future<IntakePhoto?> _fromPath(String path, int delivery) async {
     // Android (review 171, C5): the plugin used to hand over a path of the
     // sender's making (its file name, climbing out of the cache with
     // '..'; or a share's text when it had no stream), which was read when
@@ -371,7 +412,8 @@ class ShareIntake {
       return IntakePhoto(bytes, '', name,
           capturedAt: capturedAt,
           deliberate: true,
-          capture: captureMetaFor(bytes, name));
+          capture: captureMetaFor(bytes, name),
+          shareDelivery: delivery);
     } finally {
       // Always remove the plugin's container copy — accepted, rejected, or
       // unreadable, it has served its purpose once we've looked at it (the

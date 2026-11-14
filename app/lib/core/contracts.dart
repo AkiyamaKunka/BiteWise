@@ -642,11 +642,36 @@ class IntakePhoto {
   /// (design G3): every photo one scan delivers shares it. Null: no limit
   /// (deliberate adds, older call sites, tests).
   final GlassesQuota? glassesQuota;
+
+  /// A shared photo's delivery: the number the share intake gave the share
+  /// it came in (one per plugin batch event — the launch share, each live
+  /// share, the start-up batch of copies left unread), counting up from 1.
+  /// The consent gate's Not now covers whole deliveries ([ShareDeliveries]).
+  /// Null: not a shared photo.
+  final int? shareDelivery;
   const IntakePhoto(this.bytes, this.assetId, this.fileName,
       {this.capturedAt,
       this.deliberate = false,
       this.capture,
-      this.glassesQuota});
+      this.glassesQuota,
+      this.shareDelivery});
+}
+
+/// What the share intake tells the consent gate about its deliveries
+/// (IntakePhoto.shareDelivery), so one Not now covers a whole share without
+/// reading the rest of it (services/photo/share_intake.dart implements it,
+/// ui/ai_consent.dart SharedPhotoConsentGate reads it).
+abstract interface class ShareDeliveries {
+  /// The latest delivery whose batch event has arrived (0: none yet).
+  int get arrivedDelivery;
+
+  /// How many photos [delivery] may still bring: its copies, less those
+  /// already found unreadable.
+  int photoCountOf(int delivery);
+
+  /// Every copy of deliveries up to [delivery] not read yet is deleted
+  /// unread, never handed on.
+  void declineThrough(int delivery);
 }
 
 /// Meta glasses photos one automatic scan sends on to the model at most

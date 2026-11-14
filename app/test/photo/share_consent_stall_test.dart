@@ -67,18 +67,27 @@ void main() {
         hasher: (b) async => 'h${b.join('-')}',
         thumbnailer: (_) async => null);
     final s = Src();
-    pipeline.bindStream(gate.gate(intake(s).photos()));
+    final i = intake(s);
+    // Wired as the app wires it (di.dart): the gate told the deliveries.
+    pipeline.bindStream(gate.gate(i.photos(), deliveries: i));
     final first = share(5, 'A');
     s.controller.add(first);
     await pumpEventQueue(times: 100);
-    expect(reads, first);
     expect(analyses, 0);
-    expect(asks, 5);
+    // One Not now covers the whole share (privacy lane): asked once, not
+    // once per photo, nothing analyzed, and the copies not read by the
+    // answer are deleted unread.
+    expect(asks, 1);
+    final readFirst = [...reads];
+    expect(first.take(readFirst.length), readFirst);
+    expect(cleaned.toSet(), first.toSet(), reason: 'no copy left behind');
     allow = true;
     final second = share(3, 'B');
     s.controller.add(second);
     await pumpEventQueue(times: 200);
-    expect(reads, [...first, ...second]);
+    expect(asks, 2, reason: 'the next share is asked again');
+    expect(reads, [...readFirst, ...second], reason: 'never stalled');
+    expect(analyses, 3);
     await pipeline.dispose();
   });
 

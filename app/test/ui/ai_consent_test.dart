@@ -37,9 +37,35 @@ FakeSettings _unasked({String apiKey = 'k', bool watcherEnabled = false}) =>
     FakeSettings(apiKey: apiKey, watcherEnabled: watcherEnabled)
       ..aiConsent = {};
 
-IntakePhoto _photo(String id) => IntakePhoto(
+IntakePhoto _photo(String id, {int? delivery}) => IntakePhoto(
     Uint8List.fromList(List.filled(16, 3)), id, '$id.jpg',
-    capturedAt: DateTime(2026, 7, 30, 12));
+    capturedAt: DateTime(2026, 7, 30, 12), shareDelivery: delivery);
+
+/// The share intake's side of a Not now (ShareDeliveries), scripted.
+class _Deliveries implements ShareDeliveries {
+  final sizes = <int, int>{};
+  final unreadable = <int, int>{};
+  int declinedThrough = 0;
+  int _arrived = 0;
+
+  /// A batch event of [n] copies arrives; its number.
+  int arrive(int n) {
+    sizes[++_arrived] = n;
+    return _arrived;
+  }
+
+  @override
+  int get arrivedDelivery => _arrived;
+
+  @override
+  int photoCountOf(int delivery) =>
+      (sizes[delivery] ?? 0) - (unreadable[delivery] ?? 0);
+
+  @override
+  void declineThrough(int delivery) {
+    if (delivery > declinedThrough) declinedThrough = delivery;
+  }
+}
 
 Finder get _dialog => find.byKey(const Key('aiConsentDialog'));
 
@@ -793,146 +819,135 @@ void main() {
   });
 
   // One Not now per share (an-bugs 'PROBE consent'): a 5-photo Android
-  // share answered Not now asked five times. Now the answer covers every
-  // photo that arrived before it — dropped unasked, never sent — and one
-  // line says how many; a share after the answer asks again.
+  // share answered Not now asked five times. The share intake numbers each
+  // share as its batch event arrives (IntakePhoto.shareDelivery); a Not now
+  // covers every delivery that had arrived by the answer — dropped unasked,
+  // never sent, their unread copies deleted — and one line says how many.
+  // A share that arrives after the answer asks again. (share_intake_test
+  // runs the same through the real intake: unread copies stay unread.)
   group('one Not now per share', () {
-    test('a 5-photo share: one question, nothing passes, a later share '
-        'asks again', () async {
-      final settings = _unasked();
-      final gate = SharedPhotoConsentGate(settings);
-      final input = StreamController<IntakePhoto>();
-      final passed = <String>[];
-      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+    late _Deliveries deliveries;
+    late SharedPhotoConsentGate gate;
+    late StreamController<IntakePhoto> input;
+    late List<String> passed;
+    late StreamSubscription<IntakePhoto> sub;
+    late FakeSettings settings;
+
+    setUp(() {
+      settings = _unasked();
+      deliveries = _Deliveries();
+      gate = SharedPhotoConsentGate(settings);
+      input = StreamController<IntakePhoto>();
+      passed = [];
+      sub = gate
+          .gate(input.stream, deliveries: deliveries)
+          .listen((p) => passed.add(p.assetId));
+    });
+    tearDown(() async {
+      await sub.cancel();
+      await input.close();
+    });
+
+    /// A share of [n] photos arrives (its batch event), numbered next.
+    List<IntakePhoto> share(String name, int n) {
+      final d = deliveries.arrive(n);
+      return [for (var i = 1; i <= n; i++) _photo('$name-$i', delivery: d)];
+    }
+
+    test('a 5-photo share: one question, nothing passes, the rest is '
+        'declined at the intake; a later share asks again', () async {
       final notSent = <int>[];
       var asked = 0;
       final answers = [false, true];
-      // The user reads the question: the rest of the share is in by the
-      // time they answer (the test answers each one).
-      var reading = Completer<void>();
       Future<bool> ask() async {
         final yes = answers[asked++];
-        await reading.future;
-        reading = Completer<void>();
         if (yes) {
           await settings.setAiConsent('gemini', granted: true);
         } else {
-          // What askSharedPhotoConsent does at the answer.
           notSent.add(gate.declineOpenQuestion());
         }
         return yes;
       }
 
       gate.attach(ask);
-      for (var i = 1; i <= 5; i++) {
-        input.add(_photo('share1-$i'));
-      }
+      final first = share('share1', 5);
+      // The intake hands on one photo at a time; the rest wait unread.
+      input.add(first.first);
       await pumpEventQueue();
       expect(asked, 1);
-      reading.complete(); // Not now
+      expect(notSent, [5], reason: 'all five, four never read');
+      expect(deliveries.declinedThrough, 1);
+      expect(passed, isEmpty);
+      // One read ahead before the answer is dropped, not asked.
+      input.add(first[1]);
       await pumpEventQueue();
-      expect(asked, 1, reason: 'one question for the whole share');
-      expect(passed, isEmpty, reason: 'none of the five is sent');
-      expect(notSent, [5]);
+      expect(asked, 1);
+      expect(passed, isEmpty);
 
-      input.add(_photo('share2-1'));
-      input.add(_photo('share2-2'));
+      final second = share('share2', 2);
+      second.forEach(input.add);
       await pumpEventQueue();
       expect(asked, 2, reason: 'a share after the answer asks again');
-      reading.complete(); // Allow
-      await pumpEventQueue();
       expect(passed, ['share2-1', 'share2-2']);
       gate.detach(ask);
-      await sub.cancel();
-      await input.close();
     });
 
-    test('photos that arrive while the question is open are covered by its '
-        'Not now', () async {
-      final settings = _unasked();
-      final gate = SharedPhotoConsentGate(settings);
-      final input = StreamController<IntakePhoto>();
-      final passed = <String>[];
-      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+    test('a share that arrives while the question is open is covered by its '
+        'Not now, and counted', () async {
       final open = Completer<bool>();
-      var asked = 0;
       final notSent = <int>[];
+      var asked = 0;
       Future<bool> ask() async {
         asked++;
-        if (asked > 1) return false;
         final yes = await open.future;
         if (!yes) notSent.add(gate.declineOpenQuestion());
         return yes;
       }
 
       gate.attach(ask);
-      input.add(_photo('a'));
+      final a = share('a', 3);
+      input.add(a.first);
       await pumpEventQueue();
       expect(asked, 1);
-      // Still open: two more arrive (the rest of the share, or another).
-      input.add(_photo('b'));
-      input.add(_photo('c'));
-      await pumpEventQueue();
+      final b = share('b', 2); // shared again while asked
       open.complete(false);
       await pumpEventQueue();
+      expect(notSent, [5]);
+      expect(deliveries.declinedThrough, 2);
+      [...a.skip(1), ...b].forEach(input.add);
+      await pumpEventQueue();
       expect(asked, 1);
-      expect(notSent, [3]);
       expect(passed, isEmpty);
       gate.detach(ask);
-      await sub.cancel();
-      await input.close();
     });
 
-    // Review finding 7 (declined: telling shares apart needs a batch id
-    // from share_intake). What the line says is what was dropped: a photo
-    // of the same share read after the answer is asked about again (asks
-    // more, never sends more) and is not in the first count.
-    test('the count is exactly the photos dropped; one arriving after the '
-        'answer is asked again, not counted', () async {
-      final settings = _unasked();
-      final gate = SharedPhotoConsentGate(settings);
-      final input = StreamController<IntakePhoto>();
-      final passed = <String>[];
-      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+    test("the same share's files read after the answer are covered too; "
+        'only a new share asks again', () async {
       var asked = 0;
-      final notSent = <int>[];
-      var reading = Completer<void>();
       Future<bool> ask() async {
         asked++;
-        await reading.future;
-        reading = Completer<void>();
-        notSent.add(gate.declineOpenQuestion());
+        gate.declineOpenQuestion();
         return false;
       }
 
       gate.attach(ask);
-      input.add(_photo('a'));
-      input.add(_photo('b'));
+      final slow = share('slow', 3);
+      input.add(slow[0]);
       await pumpEventQueue();
-      reading.complete(); // Not now, with a and b in
+      input.add(slow[1]); // its slow files, after the answer
+      input.add(slow[2]);
       await pumpEventQueue();
-      input.add(_photo('c')); // the same share's slow last file
+      expect(asked, 1);
+      input.add(share('next', 1).single);
       await pumpEventQueue();
       expect(asked, 2);
-      reading.complete(); // Not now again
-      await pumpEventQueue();
-      expect(notSent, [2, 1]);
       expect(passed, isEmpty);
       gate.detach(ask);
-      await sub.cancel();
-      await input.close();
     });
 
     test('a covered photo is dropped even if the recipient is allowed '
         'before its turn', () async {
-      final settings = _unasked();
-      final gate = SharedPhotoConsentGate(settings);
-      final input = StreamController<IntakePhoto>();
-      final passed = <String>[];
-      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
-      final reading = Completer<void>();
       Future<bool> ask() async {
-        await reading.future; // the user reads the question
         gate.declineOpenQuestion();
         // Allowed some other way right after the Not now (Settings).
         await settings.setAiConsent('gemini', granted: true);
@@ -940,30 +955,18 @@ void main() {
       }
 
       gate.attach(ask);
-      input.add(_photo('x1'));
-      input.add(_photo('x2'));
-      await pumpEventQueue();
-      reading.complete();
+      share('x', 2).forEach(input.add);
       await pumpEventQueue();
       expect(passed, isEmpty, reason: 'the answer for them was no');
-      input.add(_photo('later'));
+      input.add(share('later', 1).single);
       await pumpEventQueue();
-      expect(passed, ['later'], reason: 'allowed now, and it came after');
+      expect(passed, ['later-1'], reason: 'allowed now, and a new share');
       gate.detach(ask);
-      await sub.cancel();
-      await input.close();
     });
 
     test('a cold-start share waits for the shell; one Not now, even with no '
         'dialog shown, covers all of it', () async {
-      final settings = _unasked();
-      final gate = SharedPhotoConsentGate(settings);
-      final input = StreamController<IntakePhoto>();
-      final passed = <String>[];
-      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
-      for (final id in ['p1', 'p2', 'p3']) {
-        input.add(_photo(id));
-      }
+      share('p', 3).forEach(input.add);
       await pumpEventQueue();
       var asked = 0;
       // The shell answers false without a dialog (it is going away).
@@ -976,18 +979,12 @@ void main() {
       await pumpEventQueue();
       expect(asked, 1);
       expect(passed, isEmpty);
+      expect(deliveries.declinedThrough, 1);
       gate.detach(ask);
-      await sub.cancel();
-      await input.close();
     });
 
     test('Allow on a several-photo share: one question, every photo passes, '
         'in order', () async {
-      final settings = _unasked();
-      final gate = SharedPhotoConsentGate(settings);
-      final input = StreamController<IntakePhoto>();
-      final passed = <String>[];
-      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
       var asked = 0;
       Future<bool> ask() async {
         asked++;
@@ -996,15 +993,58 @@ void main() {
       }
 
       gate.attach(ask);
-      for (final id in ['a1', 'a2', 'a3', 'a4']) {
-        input.add(_photo(id));
-      }
+      share('a', 4).forEach(input.add);
       await pumpEventQueue();
       expect(asked, 1);
-      expect(passed, ['a1', 'a2', 'a3', 'a4']);
+      expect(passed, ['a-1', 'a-2', 'a-3', 'a-4']);
+      expect(deliveries.declinedThrough, 0);
       gate.detach(ask);
-      await sub.cancel();
-      await input.close();
+    });
+
+    test('the count leaves out what was already passed on, and copies found '
+        'unreadable', () async {
+      // Allowed for the first two of a 4-photo share, then withdrawn.
+      await settings.setAiConsent('gemini', granted: true);
+      final four = share('w', 4);
+      input
+        ..add(four[0])
+        ..add(four[1]);
+      await pumpEventQueue();
+      expect(passed, ['w-1', 'w-2']);
+      await settings.setAiConsent('gemini', granted: false);
+      deliveries.unreadable[1] = 1; // w-4 turned out not to be a photo
+      final notSent = <int>[];
+      Future<bool> ask() async {
+        notSent.add(gate.declineOpenQuestion());
+        return false;
+      }
+
+      gate.attach(ask);
+      input.add(four[2]);
+      await pumpEventQueue();
+      expect(notSent, [1], reason: 'w-3 only: 4 − 2 passed − 1 unreadable');
+      gate.detach(ask);
+    });
+
+    test('a photo with no delivery (not from the share intake): its Not now '
+        'covers that photo only', () async {
+      var asked = 0;
+      final notSent = <int>[];
+      Future<bool> ask() async {
+        asked++;
+        notSent.add(gate.declineOpenQuestion());
+        return false;
+      }
+
+      gate.attach(ask);
+      input
+        ..add(_photo('loose-1'))
+        ..add(_photo('loose-2'));
+      await pumpEventQueue();
+      expect(asked, 2);
+      expect(notSent, [1, 1]);
+      expect(deliveries.declinedThrough, 0);
+      gate.detach(ask);
     });
 
     for (final (locale, line) in [
@@ -1014,12 +1054,23 @@ void main() {
     ]) {
       testWidgets('the app shell: one dialog for a 5-photo share, one line '
           'with the count (${locale.languageCode})', (tester) async {
+        // Its own gate and stream, made inside the test's zone (the ones
+        // from setUp deliver outside it).
         final settings = _unasked();
+        final deliveries = _Deliveries();
         final gate = SharedPhotoConsentGate(settings);
         final input = StreamController<IntakePhoto>();
         final passed = <String>[];
-        final sub =
-            gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+        final sub = gate
+            .gate(input.stream, deliveries: deliveries)
+            .listen((p) => passed.add(p.assetId));
+        List<IntakePhoto> share(String name, int n) {
+          final d = deliveries.arrive(n);
+          return [
+            for (var i = 1; i <= n; i++) _photo('$name-$i', delivery: d)
+          ];
+        }
+
         final services = UiServices(
           dao: FakeDao(),
           analyzer: FakeAnalyzer(),
@@ -1033,21 +1084,24 @@ void main() {
             _app(HomeShell(services: services), locale: locale));
         await tester.pumpAndSettle();
 
-        for (var i = 1; i <= 5; i++) {
-          input.add(_photo('s$i'));
-        }
+        final five = share('s', 5);
+        input.add(five.first);
         await tester.pumpAndSettle();
         expect(_dialog, findsOneWidget);
         await _notNow(tester);
+        expect(find.text(line), findsOneWidget);
+        five.skip(1).forEach(input.add);
+        await tester.pumpAndSettle();
         expect(_dialog, findsNothing, reason: 'not asked again for s2..s5');
         expect(passed, isEmpty);
-        expect(find.text(line), findsOneWidget);
 
-        input.add(_photo('next'));
+        input.add(share('next', 1).single);
         await tester.pumpAndSettle();
         expect(_dialog, findsOneWidget, reason: 'a later share asks again');
         await _allow(tester);
-        expect(passed, ['next']);
+        expect(passed, ['next-1']);
+        // Not awaited: a cancel future awaited inside the fake-async zone
+        // never lets the test finish.
         unawaited(sub.cancel());
       });
     }

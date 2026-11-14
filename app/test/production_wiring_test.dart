@@ -615,11 +615,13 @@ void main() {
 
     test('a shared photo goes through the gate, built on the app\'s own '
         'store and handed to the app shell', () {
+      // The gate is told the intake's deliveries, so one Not now covers a
+      // whole share and its unread copies are deleted unread.
       expect(
         init(),
         _wired(
-          r'pipeline\.bindStream\(shareConsent\.gate\('
-          r'shareIntake\.photos\(\)\)\);',
+          r'pipeline\.bindStream\(\s*shareConsent\.gate\('
+          r'shareIntake\.photos\(\),\s*deliveries:\s*shareIntake\)\);',
         ),
       );
       expect(
