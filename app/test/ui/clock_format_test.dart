@@ -252,6 +252,30 @@ void main() {
         .map((t) => t.data ?? '')
         .join(' | ');
 
+    // Review repro 4: the phone switched to 24-hour while Settings is open.
+    // Neither row redraws on the switch alone (Flutter sends no event for
+    // it, and Report Time's own MediaQuery reading is no different), so
+    // the two never disagree; the next build shows both in 24-hour.
+    testWidgets('a switch to 24-hour: the rows never disagree',
+        (tester) async {
+      addTearDown(
+          tester.platformDispatcher.clearAlwaysUse24HourTestValue);
+      tester.platformDispatcher.alwaysUse24HourFormatTestValue = false;
+      await pump(tester);
+      tester.platformDispatcher.alwaysUse24HourFormatTestValue = true;
+      await tester.pumpAndSettle();
+      final report = rowText(tester, 'reportTimeTile');
+      final next = rowText(tester, 'nextSummaryRow');
+      expect(
+          (report.contains('9:30 PM') && next.contains('Today 9:30 PM')) ||
+              (report.contains('21:30') && next.contains('Today 21:30')),
+          isTrue,
+          reason: 'Report Time "$report" vs Next summary "$next"');
+      await pump(tester); // the screen built again (a return to it)
+      expect(rowText(tester, 'reportTimeTile'), contains('21:30'));
+      expect(rowText(tester, 'nextSummaryRow'), contains('Today 21:30'));
+    });
+
     for (final use24h in const [false, true]) {
       testWidgets('Report Time and Next summary agree '
           '(${use24h ? '24' : '12'}-hour phone)', (tester) async {
