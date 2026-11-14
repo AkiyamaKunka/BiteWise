@@ -1,5 +1,6 @@
 # Chopstats release lane: signed iOS build to TestFlight, signed Android app
-# bundle to the Google Play internal track, and a GitHub Release carrying the
+# bundle to the Google Play internal track (or, from "Run workflow", the closed
+# test's alpha track), and a GitHub Release carrying the
 # arm64 APK for the friends who sideload. The owner's step-by-step (enrolment,
 # certificates, how to make every secret below) is docs/RELEASING.md. The
 # unsigned PR smoke build is mobile-build.yml.
@@ -8,7 +9,11 @@
 #   tag push  v<major>.<minor>.<patch>[+<build>]  -> both lanes; the TestFlight build
 #                                                    may go to external testers / App Review
 #   "Run workflow" (workflow_dispatch)            -> the chosen lane; the TestFlight build is
-#                                                    internal-only unless you untick the box
+#                                                    internal-only unless you untick the box; the
+#                                                    Play upload goes to play_track (internal or
+#                                                    alpha, the closed test)
+#   Nothing else: an android-v* tag (the hand-made GitHub Release of an Android-only
+#   version, docs/RELEASING.md § 6.6) does not match v* and starts no run.
 #   Never on pull_request: the repo is public and these jobs hold signing secrets.
 #
 # VERSION AND BUILD NUMBER
@@ -71,6 +76,13 @@ on:
         description: Mark the iOS build TestFlight-internal-only (it can then never reach external testers or App Review)
         type: boolean
         default: true
+      play_track:
+        description: Play track the bundle goes to when PLAY_SERVICE_ACCOUNT_JSON is set (alpha = the closed test; a tag push always uses internal)
+        type: choice
+        options:
+          - internal
+          - alpha
+        default: internal
 
 permissions:
   contents: read
@@ -113,6 +125,7 @@ jobs:
         env:
           LANE: ${{ github.event.inputs.lane || 'both' }}
           INTERNAL_ONLY_INPUT: ${{ inputs.testflight_internal_only }}
+          PLAY_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.play_track || 'internal' }}
         run: |
           set -euo pipefail
           pubspec_version=$(sed -n 's/^version:[[:space:]]*//p' app/pubspec.yaml | tr -d '[:space:]')
@@ -171,7 +184,7 @@ jobs:
           {
             echo "## Release plan"
             echo "- build name **$name**, build number **$number** (from $source)"
-            echo "- lanes: iOS=$run_ios, Android=$run_android; TestFlight internal-only=$internal_only"
+            echo "- lanes: iOS=$run_ios, Android=$run_android; TestFlight internal-only=$internal_only; Play track (if uploaded)=$PLAY_TRACK"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ---------------------------------------------------------------------------
@@ -574,7 +587,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   android:
-    name: Android → Play internal track
+    name: Android → Play (internal or alpha)
     needs: plan
     if: needs.plan.outputs.run_android == 'true'
     runs-on: ubuntu-latest
@@ -766,14 +779,19 @@ jobs:
           # "you've not uploaded debug symbols" note is informational.
           true
 
-      - name: Upload to the Play internal track
+      # Tag pushes always go to internal; "Run workflow" picks internal or
+      # alpha (the closed test's track). inputs.* is empty on a push, hence
+      # the event check. status: completed needs the app's first release to
+      # have been made by hand (docs/RELEASING.md § 6.3; otherwise Play
+      # answers "Only releases with status draft may be created on draft app").
+      - name: Upload to Play (internal, or the dispatch's play_track)
         if: steps.secrets.outputs.ready == 'true' && steps.secrets.outputs.play == 'true'
         uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ env.ANDROID_PACKAGE }}
           releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
-          tracks: internal
+          tracks: ${{ github.event_name == 'workflow_dispatch' && inputs.play_track || 'internal' }}
           status: completed
           mappingFile: ${{ steps.artifacts.outputs.mapping }}
           whatsNewDirectory: app/android/whatsnew

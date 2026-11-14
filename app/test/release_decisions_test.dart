@@ -190,6 +190,27 @@ int _playLength(String fileText) =>
   return (u32(16), u32(20), b[24], b[25]);
 }
 
+/// GitHub Actions' filter pattern for a tag (`*` matches anything but `/`,
+/// `**` anything), enough for the patterns release.yml uses.
+bool _githubTagMatches(String pattern, String tag) {
+  final re = StringBuffer('^');
+  for (var i = 0; i < pattern.length; i++) {
+    final c = pattern[i];
+    if (c == '*') {
+      if (i + 1 < pattern.length && pattern[i + 1] == '*') {
+        re.write('.*');
+        i++;
+      } else {
+        re.write('[^/]*');
+      }
+    } else {
+      re.write(RegExp.escape(c));
+    }
+  }
+  re.write(r'$');
+  return RegExp(re.toString()).hasMatch(tag);
+}
+
 void main() {
   group('R-F8: App Privacy answer B in the manifests', () {
     test('the plist reader reads what it should', () {
@@ -847,6 +868,53 @@ void main() {
             reason: folder);
       }
     });
+  });
+
+  group('release.yml: tags, Play tracks and the Gradle mirrors', () {
+    final workflow = _readRepo('.github/workflows/release.yml');
+
+    // Decision 4 (2026-11-13): Android 1.7.0 ships with a hand-made GitHub
+    // Release under android-v1.7.0, so v1.7.0 stays free for the iPhone.
+    // That tag must start no run: the only push trigger is tags v*.
+    test('only v* tags start a run, so android-v* tags start none', () {
+      final on = RegExp(r'^on:\n((?:[ \t]+.*\n|\n)*)', multiLine: true)
+          .firstMatch(workflow)!
+          .group(1)!;
+      final push = RegExp(r'^  push:\n((?:    .*\n)*)', multiLine: true)
+          .firstMatch(on)!
+          .group(1)!;
+      expect(push.trim().split('\n').map((l) => l.trim()).toList(),
+          ['tags:', "- 'v*'"]);
+      expect(on, isNot(contains('pull_request')));
+      expect(_githubTagMatches('v*', 'v1.7.0'), isTrue);
+      expect(_githubTagMatches('v*', 'v1.7.0+207'), isTrue);
+      expect(_githubTagMatches('v*', 'android-v1.7.0'), isFalse);
+      // The plan job treats only refs/tags/v* as a tag build.
+      expect(workflow,
+          contains(r'if [[ "$GITHUB_REF" == refs/tags/v* ]]; then'));
+    });
+
+    test('Run workflow can send the bundle to the closed test; tag pushes '
+        'stay on internal', () {
+      const input = '''
+      play_track:
+        description: Play track the bundle goes to when PLAY_SERVICE_ACCOUNT_JSON is set (alpha = the closed test; a tag push always uses internal)
+        type: choice
+        options:
+          - internal
+          - alpha
+        default: internal
+''';
+      expect(workflow, contains(input));
+      expect(
+          workflow,
+          contains(r"tracks: ${{ github.event_name == 'workflow_dispatch' && "
+              r"inputs.play_track || 'internal' }}"));
+      expect(RegExp(r'^\s*tracks:', multiLine: true).allMatches(workflow),
+          hasLength(1));
+      expect(workflow, contains('status: completed'));
+    });
+
   });
 
 }
