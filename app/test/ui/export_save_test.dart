@@ -205,8 +205,10 @@ void main() {
     await choose(tester, 'exportSaveToDevice');
     expect(saver.calls, hasLength(1));
     expect(shared.single.existed, isTrue,
-        reason: 'the share target reads the file after this');
+        reason: 'shared while it is there');
     expect(shared.single.path, saver.calls.single.path);
+    expect(exportsLeft(), isEmpty,
+        reason: "Android's share sheet works on share_plus's own copy");
 
     // Next time: no sheet, straight to Share.
     shared.clear();
@@ -225,6 +227,32 @@ void main() {
     expect(shared.single.existed, isTrue);
     expect(shared.single.path.split('/').last,
         matches(RegExp(r'^chopstats-\d{4}-\d\d-\d\d\.json$')));
+    // share_plus 13.2.1 (Share.kt) copies the file into
+    // cacheDir/share_plus/ and shares that copy: the original goes now.
+    expect(exportsLeft(), isEmpty);
+  });
+
+  testWidgets("the next export sweeps old exports, share_plus's copies of "
+      'them included, and nothing else', (tester) async {
+    final copies = Directory('${tmp.path}/share_plus')..createSync();
+    for (final name in [
+      'chopstats-2026-11-01.json',
+      'calorietracker-2026-10-01.json',
+      'day_report.png',
+    ]) {
+      File('${copies.path}/$name').writeAsStringSync('x');
+    }
+    File('${tmp.path}/chopstats-2026-11-02.json').writeAsStringSync('old');
+    await pump(tester);
+    await tapExport(tester);
+    expect(
+        copies.listSync().map((f) => f.path.split('/').last).toList(),
+        ['day_report.png'],
+        reason: 'only our exports are swept');
+    expect(exportsLeft(), hasLength(1), reason: 'just the new one');
+    expect(exportsLeft().single, isNot(endsWith('chopstats-2026-11-02.json')));
+    await tester.tap(find.byKey(const Key('exportCancel')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('iPhone: unchanged — no sheet, straight to Share',
@@ -234,6 +262,8 @@ void main() {
     expect(find.byKey(const Key('exportSaveToDevice')), findsNothing);
     expect(shared, hasLength(1));
     expect(saver.calls, isEmpty);
+    expect(exportsLeft(), hasLength(1),
+        reason: 'iOS shares the file itself; the next export sweeps it');
   });
 
   group('PlatformFileSaver (the channel contract)', () {

@@ -452,12 +452,10 @@ class _DataSectionState extends State<DataSection> {
         .saveFile(path: file.path, name: name, mime: exportMimeType);
     if (status == SaveFileStatus.unavailable) {
       _saveUnavailable = true;
-      await widget.shareFile(file.path, l10n.exportShareSubject);
+      await _share(file, l10n);
       return;
     }
-    try {
-      if (file.existsSync()) file.deleteSync();
-    } catch (_) {}
+    _deleteQuietly(file);
     final line = switch (status) {
       SaveFileStatus.ok => l10n.exportSaved,
       SaveFileStatus.busy => l10n.exportSaveBusy,
@@ -468,6 +466,39 @@ class _DataSectionState extends State<DataSection> {
     if (line != null && mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(line)));
+    }
+  }
+
+  /// Share… with the export at [file]. On Android, share_plus (13.2.1,
+  /// Share.kt) copies it into the cache's share_plus/ folder before the
+  /// share sheet opens and shares that copy, so the original goes at once;
+  /// the copy is swept at the next export (and share_plus empties its
+  /// folder at the next share). iOS shares the file itself, which the app
+  /// it goes to may read after the sheet closes: it stays until the next
+  /// export's sweep.
+  Future<void> _share(File file, AppLocalizations l10n) async {
+    await widget.shareFile(file.path, l10n.exportShareSubject);
+    if (widget.platform == 'android') _deleteQuietly(file);
+  }
+
+  static void _deleteQuietly(File file) {
+    try {
+      if (file.existsSync()) file.deleteSync();
+    } catch (_) {}
+  }
+
+  /// Older exports in [dir], and share_plus's copies of them in its
+  /// share_plus/ folder there: each is a full copy of the food log.
+  static void _sweepExports(Directory dir) {
+    for (final d in [dir, Directory('${dir.path}/share_plus')]) {
+      try {
+        if (!d.existsSync()) continue;
+        for (final f in d.listSync()) {
+          if (f is File && isExportFileName(f.path.split('/').last)) {
+            _deleteQuietly(f);
+          }
+        }
+      } catch (_) {}
     }
   }
 
@@ -488,13 +519,7 @@ class _DataSectionState extends State<DataSection> {
       // Sweep older exports first: each is a FULL copy of the food log,
       // and the cache dir is readable by anything with the app's storage
       // — keeping a year of them there is a privacy cost with no upside.
-      try {
-        for (final f in dir.listSync()) {
-          if (f is File && isExportFileName(f.path.split('/').last)) {
-            f.deleteSync();
-          }
-        }
-      } catch (_) {}
+      _sweepExports(dir);
       // 1.7.0: the full export — the records AND every meal picture,
       // streamed one month at a time (kind `full`), so a file moved to
       // another phone brings the pictures too.
@@ -505,22 +530,21 @@ class _DataSectionState extends State<DataSection> {
           installId: widget.backup?.installIdOrNull ?? newInstallId(),
           snapshot: snapshot);
       // Written first, so a failure is said before any choice; then where
-      // it goes (no spinner behind the sheet). Cancel deletes it again.
-      if (!mounted) return;
+      // it goes (no spinner behind the sheet). Cancel deletes it again, as
+      // does leaving the page while it was written.
+      if (!mounted) {
+        _deleteQuietly(file);
+        return;
+      }
       final to = await _exportTarget(l10n);
       if (to == null) {
-        try {
-          if (file.existsSync()) file.deleteSync();
-        } catch (_) {}
+        _deleteQuietly(file);
         return;
       }
       if (to == _ExportTo.device) {
         await _saveToDevice(file, l10n);
       } else {
-        // Left in the cache folder: the app it is shared to may read it
-        // after the share sheet closes (a Drive upload does). The sweep
-        // above removes it at the next export.
-        await widget.shareFile(file.path, l10n.exportShareSubject);
+        await _share(file, l10n);
       }
     } catch (e) {
       if (mounted) {
