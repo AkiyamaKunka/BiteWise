@@ -435,6 +435,28 @@ class ReportNotifier {
     return null;
   }
 
+  /// Whether the daily summary can be delivered: the app's notifications
+  /// on ([notificationsEnabled]) and, on Android, its own channel not
+  /// blocked — the user can block 'Daily summary' alone, which the
+  /// app-level switch does not show (review, 2026-11-13). Null when the
+  /// platform cannot say. Never throws.
+  Future<bool?> summaryNotificationsEnabled() async {
+    final app = await notificationsEnabled();
+    if (app == false || _enabledProbe != null) return app;
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      final channels = await android?.getNotificationChannels();
+      final blocked = channels?.any((c) =>
+              c.id == summaryChannelId && c.importance == Importance.none) ??
+          false;
+      if (blocked) return false;
+    } catch (_) {
+      // The plugin cannot list channels: the app-level answer stands.
+    }
+    return app;
+  }
+
   /// The slot the daily summary is armed for, as far as this process can
   /// tell: the live Timer's next fire (Android), or — on the OS path — the
   /// last armed slot IF the OS still lists the card as pending. Null means
@@ -461,7 +483,7 @@ class ReportNotifier {
   /// The payload of the card [scheduleDailyAt] hands the OS: its slot, as
   /// a UTC instant. The OS keeps it with the pending card, so any engine
   /// can later ask which slot the card it holds is for
-  /// ([pendingDailySlot]). Nothing reads it on a tap.
+  /// ([pendingDailyCards]). Nothing reads it on a tap.
   ///
   /// [day]: the calendar day the card describes, kept too — on the night
   /// DST starts a slot can normalise past the night rule's hour, so the

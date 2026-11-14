@@ -2411,7 +2411,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get watcherLimitedFooter =>
-      'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
+      'Chopstats can\'t see all your photos, so new photos are not logged automatically.';
 
   @override
   String get fixAction => 'Fix';
@@ -3665,4 +3665,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String diagBgRunNotFinished(String step) {
     return 'Not finished yet — still running, or stopped since; last step: $step.';
   }
+
+  @override
+  String get watcherLimitedFooterIos =>
+      'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
 }

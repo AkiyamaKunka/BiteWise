@@ -123,6 +123,12 @@ class _FakeAndroid extends Fake
   Future<List<AndroidNotificationChannel>?> getNotificationChannels() async =>
       live.values.toList();
 
+  /// The app-level switch.
+  bool appEnabled = true;
+
+  @override
+  Future<bool?> areNotificationsEnabled() async => appEnabled;
+
   @override
   Future<bool?> requestNotificationsPermission() async {
     permissionRequests++;
@@ -556,6 +562,51 @@ void main() {
     await notifier.init();
     expect(android.channels, isNotEmpty, reason: 'it did initialize');
     expect(android.permissionRequests, 0);
+  });
+
+  // Review (finding 12b): the user can block 'Daily summary' alone; the
+  // app-level switch stays on and Settings said nothing.
+  group('summaryNotificationsEnabled', () {
+    test('a blocked summary channel: the summary cannot be delivered',
+        () async {
+      final android = _FakeAndroid(existing: [
+        const AndroidNotificationChannel('calorietracker_reports', 'Daily summary',
+            importance: Importance.none),
+      ]);
+      final notifier =
+          ReportNotifier(plugin: _RecordingPlugin(android: android));
+      expect(await notifier.notificationsEnabled(), isTrue);
+      expect(await notifier.summaryNotificationsEnabled(), isFalse);
+    });
+
+    test('only the meal channel blocked, or none: deliverable', () async {
+      final android = _FakeAndroid(existing: [
+        const AndroidNotificationChannel(
+            ReportNotifier.mealChannelId, 'Logged meals',
+            importance: Importance.none),
+        const AndroidNotificationChannel('calorietracker_reports', 'Daily summary',
+            importance: Importance.low),
+      ]);
+      expect(
+          await ReportNotifier(plugin: _RecordingPlugin(android: android))
+              .summaryNotificationsEnabled(),
+          isTrue);
+    });
+
+    test('app notifications off: false, whatever the channels', () async {
+      final android = _FakeAndroid()..appEnabled = false;
+      expect(
+          await ReportNotifier(plugin: _RecordingPlugin(android: android))
+              .summaryNotificationsEnabled(),
+          isFalse);
+    });
+
+    test('no platform plugin: unknown, never a throw', () async {
+      expect(
+          await ReportNotifier(plugin: _BarePlugin())
+              .summaryNotificationsEnabled(),
+          isNull);
+    });
   });
 
   test('without channel strings the channels keep their English names',

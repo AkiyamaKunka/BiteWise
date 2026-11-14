@@ -2219,8 +2219,7 @@ class AppLocalizationsZh extends AppLocalizations {
       '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请允许访问所有照片，才能自动记录。';
 
   @override
-  String get watcherLimitedFooter =>
-      '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
+  String get watcherLimitedFooter => '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。';
 
   @override
   String get fixAction => '去修复';
@@ -3296,4 +3295,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String diagBgRunNotFinished(String step) {
     return '尚未完成 —— 仍在运行，或之后被停止；最后一步：$step。';
   }
+
+  @override
+  String get watcherLimitedFooterIos =>
+      '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
 }

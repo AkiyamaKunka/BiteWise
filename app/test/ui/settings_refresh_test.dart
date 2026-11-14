@@ -957,6 +957,16 @@ void main() {
         expect(link, findsNothing);
       }, variant: android);
 
+      // Review (finding 12a): the line above the link said to go to the
+      // Settings app.
+      testWidgets('the line above the link does not send the user to the '
+          'Settings app', (tester) async {
+        await pumpLimited(tester, PhotoAccessFix.answered);
+        expect(find.textContaining(l.watcherLimitedFooter), findsOneWidget);
+        expect(find.textContaining(l.watcherLimitedFooterIos), findsNothing);
+        expect(find.textContaining('Settings app'), findsNothing);
+      }, variant: android);
+
       testWidgets('a selection kept is the user\'s answer: no App info, the '
           'line stays', (tester) async {
         await pumpLimited(tester, PhotoAccessFix.answered);
@@ -992,7 +1002,8 @@ void main() {
       testWidgets('iOS: no link; Fix still opens Settings', (tester) async {
         await pumpLimited(tester, PhotoAccessFix.full);
         expect(find.byKey(const Key('photosAllowAllLink')), findsNothing);
-        expect(find.textContaining(l.watcherLimitedFooter), findsOneWidget);
+        expect(find.textContaining(l.watcherLimitedFooterIos), findsOneWidget,
+            reason: 'iOS keeps the line that says where to fix it');
       }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
     });
 

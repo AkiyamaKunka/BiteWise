@@ -1918,9 +1918,9 @@
   },
   "autoScanPausedTitle": "Photos are not being logged automatically",
   "watcherLimitedAccess": "Only selected photos are shared, so new food photos won't be seen automatically. Allow access to all photos for automatic logging.",
-  "watcherLimitedFooter": "Chopstats can't see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.",
+  "watcherLimitedFooter": "Chopstats can't see all your photos, so new photos are not logged automatically.",
   "@watcherLimitedFooter": {
-    "description": "First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn)."
+    "description": "First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn). On Android it stands alone: the 'Allow access to all photos' link under it fixes it in place (watcherAllowAllPhotos). iOS shows watcherLimitedFooterIos, which starts with this sentence."
   },
   "fixAction": "Fix",
   "importDialogTitle": "Import exported data",
@@ -3492,5 +3492,9 @@
         "type": "String"
       }
     }
+  },
+  "watcherLimitedFooterIos": "Chopstats can't see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.",
+  "@watcherLimitedFooterIos": {
+    "description": "iOS: first line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full; watcherLimitedFooter plus where to fix it (the Settings app). Must start with watcherLimitedFooter."
   }
 }

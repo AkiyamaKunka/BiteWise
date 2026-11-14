@@ -793,8 +793,13 @@ class _SettingsScreenState extends State<SettingsScreen>
         : null;
     // Not full access: the switch is on, but photos taken from now on are
     // outside what the app may read, so they are never logged.
-    final limited =
-        _watcherEnabled && _photosLimited ? l10n.watcherLimitedFooter : null;
+    // Android: the link under the footer fixes it in place, so the line
+    // does not send the user to the Settings app (review, 2026-11-13).
+    final limited = _watcherEnabled && _photosLimited
+        ? (_fixesPhotoAccessInPlace
+            ? l10n.watcherLimitedFooter
+            : l10n.watcherLimitedFooterIos)
+        : null;
     return [?limited, ?paused, ?stuck, footer].join('\n');
   }
 

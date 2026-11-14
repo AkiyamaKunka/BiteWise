@@ -487,7 +487,8 @@ class AppServices {
       // One-click setup links (bitewise://setup?...), see setup_link.dart.
       setupLinks: appLinks.uriLinkStream,
       initialSetupLink: appLinks.getInitialLink,
-      notificationsEnabled: notifier.notificationsEnabled,
+      // The app's notifications, and the summary's own channel (Android).
+      notificationsEnabled: notifier.summaryNotificationsEnabled,
       nextSummaryAt: () async {
         await summaryArmed.future;
         return notifier.scheduledDailyAt();

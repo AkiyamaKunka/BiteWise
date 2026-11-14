@@ -3732,10 +3732,10 @@ abstract class AppLocalizations {
   /// **'Only selected photos are shared, so new food photos won\'t be seen automatically. Allow access to all photos for automatic logging.'**
   String get watcherLimitedAccess;
 
-  /// First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn).
+  /// First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn). On Android it stands alone: the 'Allow access to all photos' link under it fixes it in place (watcherAllowAllPhotos). iOS shows watcherLimitedFooterIos, which starts with this sentence.
   ///
   /// In en, this message translates to:
-  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
+  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically.'**
   String get watcherLimitedFooter;
 
   /// No description provided for @fixAction.
@@ -5512,6 +5512,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not finished yet — still running, or stopped since; last step: {step}.'**
   String diagBgRunNotFinished(String step);
+
+  /// iOS: first line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full; watcherLimitedFooter plus where to fix it (the Settings app). Must start with watcherLimitedFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
+  String get watcherLimitedFooterIos;
 }
 
 class _AppLocalizationsDelegate

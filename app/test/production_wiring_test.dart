@@ -807,6 +807,16 @@ void main() {
           reason: 'init runs at every start, in every engine');
     });
 
+    // Review (finding 12b): Settings' notifications-off row asks about the
+    // summary's own channel too (summaryNotificationsEnabled, behaviour-
+    // tested in notifications_test).
+    test('Settings reads whether the summary itself can be delivered', () {
+      expect(
+        _source('lib/ui/di.dart'),
+        _wired(r'notificationsEnabled: notifier\.summaryNotificationsEnabled,'),
+      );
+    });
+
     // The Play push: meal cards have their own channel, named in the app
     // language like the summary's, in both engines.
     test('both engines name both channels in the app language', () {
