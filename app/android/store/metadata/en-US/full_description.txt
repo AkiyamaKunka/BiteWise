@@ -27,7 +27,7 @@ Paste an API key from Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSee
 YOUR DATA STAYS ON YOUR PHONE
 • No sign-up and no account. Chopstats has no backend, and the developer receives none of your data.
 • Your meals, weight and settings are stored on your phone. API keys are kept in encrypted storage protected by the Android Keystore.
-• Data leaves your phone only to reach the AI service you chose (or your own server, if you set one up), and only after you allow it: the photo or text being analyzed, plus the context it needs, such as your dietary profile or recent meal names when you ask for a fix. The copy of a photo that is sent has its embedded metadata, such as location, removed. Restaurant nutrition, if you turn it on, sends chain and food names to that AI service's web search; on Android, Chopstats never reads where a photo was taken. The privacy policy lists exactly what is sent.
+• Data leaves your phone only to reach the AI service you chose (or your own server, if you set one up), and only after you allow it: the photo or text being analyzed, plus the context it needs, such as your dietary profile or recent meal names when you ask for a fix. The copy of a photo that is sent has its embedded metadata, such as location, removed. Restaurant nutrition, if you turn it on, sends chain and food names and the country code US to that AI service's web search; on Android, Chopstats never reads where a photo was taken. The privacy policy lists exactly what is sent.
 • No ads, no analytics and no tracking. Export your data to a file whenever you like.
 • Open source.
 

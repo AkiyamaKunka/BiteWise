@@ -25,12 +25,24 @@ zh-CN.
 
 ## How
 
-- Emulator AVD `ct_e2e` is 1080×2400 (2.22:1), which Play refuses. Before
-  capturing: `adb shell wm size 1080x1920` (undo with `adb shell wm size
-  reset`). Gesture navigation, light mode unless the shot says dark, font
-  and display size at default, system language as the shot's language,
-  status bar clean (`adb shell settings put global sysui_demo_allowed 1`
-  and the demo-mode broadcasts, or crop nothing and accept the real bar).
+- Use an emulator whose screen is 1080×1920 to begin with: the `pixel_2`
+  device profile (1080×1920, 9:16). The existing AVD `ct_e2e` is a Pixel 7
+  at 1080×2400 (2.22:1), which Play refuses, and squeezing it with
+  `adb shell wm size` changes the layout the app was laid out for. For
+  example, with the system image `ct_e2e` already uses and the
+  `avdmanager` under `$ANDROID_HOME/cmdline-tools` (not Homebrew's):
+
+  ```bash
+  "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd -n play_shots \
+      -k "system-images;android-35;google_apis;arm64-v8a" -d pixel_2
+  ```
+
+  `adb shell wm size 1080x1920` on `ct_e2e` (undo with `adb shell wm size
+  reset`) is only the fallback. Gesture navigation, light mode unless the
+  shot says dark, font and display size at default, system language as the
+  shot's language, status bar clean (`adb shell settings put global
+  sysui_demo_allowed 1` and the demo-mode broadcasts, or accept the real
+  bar).
 - Capture: `adb exec-out screencap -p > NN_name.png`. `screencap` writes
   RGBA; drop the alpha and check every file with
   `python3 scripts/play_graphics.py --check-shots app/android/store/screenshots/en-US`

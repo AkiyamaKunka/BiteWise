@@ -1071,7 +1071,7 @@ position. The paste-ready answers live next to the app in
    build itself is a follow-up (§ 6.3, *The Play build*).
 2. **`http://` own-server addresses are refused** on every platform, so
    Data safety answers "encrypted in transit: Yes" (§ 6.5).
-   <!-- depends: privacy (kRequireHttpsServer flipped to true in the build that ships) -->
+   <!-- gated: release_decisions_test (kRequireHttpsServer = true) and release.yml's Android job -->
 3. **One signer:** keep the package `dev.calorietracker.calorie_tracker`,
    and make the existing upload key the Play app-signing key (§ 6.3), so
    Play and GitHub APKs share one signature.
@@ -1131,20 +1131,40 @@ an answer to them.
    (Simplified), `zh-CN`.
 7. **Developer verification**
    (<https://developer.android.com/developer-verification>, read
-   2026-11-13): certified Android devices install only apps from
-   registered developers, wherever the app comes from. It has been
-   enforced in Brazil, Indonesia, Singapore and Thailand since 2026-09-30
-   and is planned for every country in 2027. Play registers its own apps
-   automatically; with one signer (§ 6.3) that covers the GitHub APK too.
-   After the first Play release, check Play Console › *Android developer
-   verification* › package names: the package should be listed with the
-   key whose SHA-256 release.yml prints as "APK signer SHA-256". Add the
-   key there if it is missing.
+   2026-11-13): since 2026-09-30, certified Android 7+ devices in Brazil,
+   Indonesia, Singapore and Thailand check that apps installed from
+   participating stores (Google Play among them) come from registered
+   developers. Google's FAQ says direct installs, such as the GitHub APK,
+   are not covered yet; the requirement goes global in 2027. Play
+   registers its own apps, **but this package has already shipped outside
+   Play** (the upload-key-signed GitHub APKs since 1.5.0), so expect Play
+   Console to ask you, once, to prove that you own that key
+   (<https://support.google.com/googleplay/android-developer/answer/16984799>,
+   read 2026-11-13):
+   - Play Console › *Android developer verification* › the package ›
+     *Add key*: the upload key's SHA-256, the "APK signer SHA-256" line a
+     Release run prints.
+   - *Sign and upload an APK*: put the snippet the console shows into
+     `app/android/app/src/main/assets/adi-registration.properties`, build
+     a release APK signed with the upload key on the Mac
+     (`flutter build apk --release` with `key.properties`, § 6.2), and
+     upload that APK there. It only proves ownership: never distribute
+     it, and delete the snippet file afterwards (do not commit it).
+
+   After the first Play release, check that the package page lists that
+   key. With one signer (§ 6.3) nothing more is needed.
 
 ### 6.2 Upload keystore and `key.properties`
 
+**Done; never regenerate it.** The upload key has signed every GitHub APK
+since 1.5.0, and with decision 3 it becomes the Play app-signing key too:
+a new key would make every installed copy a different app. The owner keeps
+it backed up from `~/.bitewise/release`; its base64 is the secret
+`ANDROID_UPLOAD_KEYSTORE_BASE64`. For reference, a key like it is made
+with:
+
 ```bash
-keytool -genkey -v -keystore ~/upload-keystore.jks -keyalg RSA -storetype JKS \
+keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -storetype JKS \
         -keysize 2048 -validity 10000 -alias upload
 ```
 
@@ -1164,7 +1184,7 @@ copy.
 For a local release build create `app/android/key.properties`:
 
 ```properties
-storeFile=/Users/<you>/upload-keystore.jks   # absolute, or relative to app/android/
+storeFile=/path/to/the/upload-keystore.jks   # absolute, or relative to app/android/
 storePassword=…
 keyPassword=…
 keyAlias=upload
@@ -1173,7 +1193,7 @@ keyAlias=upload
 `app/android/app/build.gradle.kts` picks it up automatically; without the
 file it warns and uses the debug key (so `scripts/build_share_apk.sh` and
 contributors keep working). Secrets (§ 3): `ANDROID_UPLOAD_KEYSTORE_BASE64`
-(`base64 -i ~/upload-keystore.jks | pbcopy`), `ANDROID_KEYSTORE_PASSWORD`,
+(`base64 -i <the upload keystore> | pbcopy`), `ANDROID_KEYSTORE_PASSWORD`,
 `ANDROID_KEY_PASSWORD`; variable `ANDROID_KEY_ALIAS` only if you did not use
 `upload`.
 
@@ -1191,22 +1211,39 @@ read 2026-11-13), but do it **before the first internal rollout anyone
 installs**: an install that already carries Google's key can only switch
 by uninstalling.
 
-1. Run the exact `java -jar pepk.jar …` command the page shows, on the
-   Mac, against `~/upload-keystore.jks` with alias `upload`; it writes an
-   encrypted zip. Upload that zip. The `.jks` itself never leaves the Mac.
-2. Check the result on the same page: the app signing key's SHA-256 must
+1. First make sure the keystore you are about to hand over is the one
+   that signs the GitHub APKs: the upload keystore you backed up from
+   `~/.bitewise/release`, whose base64 is `ANDROID_UPLOAD_KEYSTORE_BASE64`.
+   Run `keytool -list -v -keystore <that keystore> -alias upload` and
+   compare its `SHA256:` line with the "APK signer SHA-256" line in the
+   log of the **v1.6.0** Release run (Actions › Release › the run for tag
+   `v1.6.0` › the Android job › *Verify the bundle is signed with the upload
+   key…*). keytool prints upper case with colons, the run lower case
+   without; the hex digits must be the same. If they differ, stop: that
+   keystore is not the upload key.
+2. Run the exact `java -jar pepk.jar …` command the page shows, on the
+   Mac, against that keystore with alias `upload`; it writes an encrypted
+   zip. Upload that zip. The keystore itself never leaves the Mac.
+3. Check the result on the same page: the app signing key's SHA-256 must
    equal the "bundle signer SHA-256" and "APK signer SHA-256" lines that
    every Release run prints. If the page also lists an added
    quantum-ready key, ask Play support before telling anyone that the
    GitHub APK and the Play build can replace each other: Google says
    Android 17+ strictly enforces the upgraded hybrid key, and whether that
    applies to a key you provided is not documented.
-3. Google recommends different upload and signing keys. One key for both
-   is the price of one signer. If the key leaks or is lost, Play can still
-   take updates after *Request upload key reset* (it keeps its copy of the
-   signing key), but GitHub APKs could no longer update in place. A
-   separate upload key later would also need release.yml's "APK signer ==
-   bundle signer" check to compare the APK with the app-signing
+4. Google recommends different upload and signing keys. One key for both
+   is the price of one signer, and it changes what a leak means:
+   - **Lost** (no copy left): Play keeps its copy of the signing key and
+     takes updates again after *Request upload key reset*, but GitHub
+     APKs can no longer update in place.
+   - **Leaked**: that is a leak of the app-signing key itself, which
+     *Request upload key reset* does not fix (it only replaces the key
+     you upload with). Play's remedy is its app signing key upgrade (key
+     rotation) on the same *Manage Play app signing* page; read Google's
+     page on it before relying on it (answer/9842756 above).
+
+   A separate upload key later would also need release.yml's "APK signer
+   == bundle signer" check to compare the APK with the app-signing
    certificate instead.
 
 **Signing secrets in the protected environment (owner action).** Both
@@ -1214,9 +1251,11 @@ release.yml jobs already run in the environment `release`, which today has
 no protection rules, so **nothing in the workflow changes**:
 
 1. Repository › Settings › Environments › `release`: *Required reviewers*
-   = you; *Deployment branches and tags* = selected: `main`, `release/*`
-   and tags `v*`. A run from any other branch then stops before it can
-   read a secret.
+   = you; *Deployment branches and tags* = selected: `main`, `release/*`,
+   `hotfix/*` and tags `v*`. The 1.6.x hotfixes branch from tag `v1.6.0`
+   (today `release/1.6.1`); add whatever prefix a hotfix branch uses
+   before running the workflow from it. A run from any other branch then
+   stops before it can read a secret.
 2. Add `ANDROID_UPLOAD_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD` and
    `ANDROID_KEY_PASSWORD` (and later `PLAY_SERVICE_ACCOUNT_JSON`) as
    **environment** secrets with the same names (an environment secret
@@ -1241,7 +1280,7 @@ video permissions declaration. The plan for that follow-up lane:
   Settings › Photos (Watch Camera Roll, Meta glasses photos, Backfill
   Lookback, Background scan) and Photo Coverage, and never registers the
   photo scan; Log and Leftovers already use the system photo picker
-  without full access <!-- depends: photos -->;
+  without full access <!-- gated: release_decisions_test (system_photo_picker.dart and its use in add_flow.dart) -->;
 - release.yml builds both: the Play bundle with the property and the
   define, the GitHub APK as today, and its verify step fails a Play
   bundle that declares any `READ_MEDIA_*` permission;
@@ -1311,7 +1350,8 @@ every upload; § 9 says why and how to change that.
 
 ### 6.5 App content and the store listing
 
-Everything under **Policy › App content**, answer by answer, is in
+Everything under **Monitor and improve › Policy and programs › App
+content**, answer by answer, is in
 [`app/android/store/app_content.md`](../app/android/store/app_content.md);
 the Data safety form is in
 [`data_safety.md`](../app/android/store/data_safety.md). Finish them all
@@ -1346,8 +1386,11 @@ Data safety are required on closed, open and production tracks. In short:
   Google's sentence in its description ("not a medical device and does
   not diagnose, treat, cure, or prevent any medical condition") and
   reminds users to consult a healthcare professional. Both full
-  descriptions end with the two sentences, and Settings › Your Data shows
-  them in the app. <!-- depends: privacy (the in-app health footer) -->
+  descriptions end with the two sentences, and from 1.7.0 Settings › Your
+  Data reminds users in the app ("Chopstats is not medical advice. For
+  decisions about your health or diet, consult a healthcare
+  professional.", `settingsHealthReminder`; gated by
+  `release_decisions_test.dart`).
 - **Data safety**
   (<https://support.google.com/googleplay/android-developer/answer/10787469>,
   read 2026-11-13). Google counts any transfer off the device as
@@ -1359,7 +1402,9 @@ Data safety are required on closed, open and production tracks. In short:
   restaurant lookup's `US` country code, Approximate location; **shared:
   No** (user-initiated transfers, and the consent dialog as a prominent
   disclosure); not ephemeral; optional; App functionality; encrypted in
-  transit; no accounts. Google's form is not Apple's: § 4.3 keeps Location
+  transit **only for a build with `kRequireHttpsServer = true`** in
+  `app/lib/core/server_transport.dart` (decision 2; release.yml's Android
+  job refuses to build without it); no accounts. Google's form is not Apple's: § 4.3 keeps Location
   at No for the App Store.
 - **User Data policy**
   (<https://support.google.com/googleplay/android-developer/answer/10144311>,
@@ -1398,7 +1443,7 @@ read 2026-11-13):
   Android: the photo picker and the share sheet, keys in Keystore-backed
   storage, restaurant lookups from printed brands only, no glasses check.
   The zh-CN text quotes control names and examples in 「」.
-  <!-- depends: photos (the full descriptions' "Android's photo picker") -->
+  <!-- gated: release_decisions_test (system_photo_picker.dart and its use in add_flow.dart) -->
 - **Graphics:** `python3 scripts/play_graphics.py` renders
   `app/android/store/graphics/icon-512.png` (512 × 512, 32-bit PNG with
   alpha, at most 1,024 KB) and the feature graphic, which Play requires
@@ -1466,6 +1511,13 @@ that APK on the `v1.7.0` release and, with `PLAY_SERVICE_ACCOUNT_JSON`
 set, sends the bundle to the internal track. Both are harmless (an
 upgrade for anyone who installs them).
 
+**Developer verification and the GitHub APK.** Because the package
+shipped as GitHub APKs before it existed on Play, Play Console may ask,
+once, for proof that you own the key that signed them: an APK signed with
+the upload key that carries the console's snippet in
+`assets/adi-registration.properties` (§ 6.1, item 7). Do it when asked;
+that APK is never published.
+
 **The friends and the GitHub APK.** Google Play is not available in
 mainland China, so the GitHub Release APK stays (§ 7). With one signer
 (decision 3), a phone can move between the GitHub APK and the Play build
@@ -1492,9 +1544,10 @@ make them definitive after that check.
   (<https://developer.android.com/guide/practices/page-sizes>, read
   2026-11-13): apps targeting API 35+ must support 16 KB pages on 64-bit
   devices, and from 2027-02-01 an update that does not cannot be
-  released. Met on `main` 9d7b4d2 (every 64-bit `.so` has LOAD alignment
-  of at least 16 KB and a safe RELRO end; `zipalign` passes). Check a new
-  build, with the NDK's `llvm-readelf` and build-tools' `zipalign`:
+  released. Met when the plan checked a release build of 9d7b4d2 on
+  2026-11-13 (every 64-bit `.so` had LOAD alignment of at least 16 KB and
+  a safe RELRO end; `zipalign` passed). Check every new release build,
+  with the NDK's `llvm-readelf` and build-tools' `zipalign`:
 
   ```bash
   ndk="$ANDROID_HOME/ndk/28.2.13676358/toolchains/llvm/prebuilt/darwin-x86_64/bin"
@@ -1512,6 +1565,13 @@ make them definitive after that check.
   developers but on no Google page, an edge-to-edge "deprecated APIs"
   recommendation caused by Flutter engine calls that only run below
   API 35.
+- **Known, not fixed here:** on Android 7 to 11 the launch window behind
+  Flutter's first frame is white in light mode (Theme.Light's
+  `colorBackground`) before the `#F2F2F7` page; Android 12+ is fixed in
+  `res/values-v31`. `drawable-v21/launch_background.xml` alone cannot fix
+  it (one file cannot tell light from dark mode); one
+  `android:colorBackground` line in `LaunchTheme` in `res/values/styles.xml`
+  and `res/values-night/styles.xml` would.
 - **When the app moves to API 37:**
   - local network access becomes a runtime permission
     (`ACCESS_LOCAL_NETWORK`, in the nearby-devices group) and is blocked
@@ -1522,6 +1582,12 @@ make them definitive after that check.
     resizability are ignored at 600 dp and wider) ends.
 
 ### 6.8 Owner checklist, in order
+
+At the merge of the Google Play docs branch (`android/release`), whoever
+merges sets the privacy policy's date: `Effective date:` in
+`docs/PRIVACY.md` and `kPolicyEffectiveDate` in
+`app/test/release_decisions_test.dart`, both to the merge date (the test
+checks that they agree; it cannot tell that the date is old).
 
 Do now:
 
@@ -1536,7 +1602,9 @@ Do now:
    `release` environment and move the Android signing secrets into it, in
    § 6.3's order.
 5. Create the app record and the store settings (§ 6.1), then fill in
-   App content and Data safety from `app/android/store/` (§ 6.5).
+   App content and Data safety from `app/android/store/` (§ 6.5). Data
+   safety's "encrypted in transit: Yes" is true only for builds with
+   `kRequireHttpsServer = true`; step 8 checks it.
 6. Store listing: paste the en-US and zh-CN title, short and full
    descriptions; upload `icon-512.png` and the feature graphics.
 
@@ -1545,7 +1613,10 @@ the screenshots:
 
 7. Upload the screenshots (at least 4 per language).
 8. Run workflow › `main` › lane `play`; check the plan summary's build
-   number and the bundle's permissions (§ 6.3).
+   number, the bundle's permissions (§ 6.3), and that
+   `app/lib/core/server_transport.dart` says `kRequireHttpsServer = true`
+   at the run's commit (the Android job's *Check the app refuses plain-http
+   servers* step stops the run otherwise).
 9. Upload the bundle to Internal testing. **Do NOT roll it out yet:**
    change the signing key to the upload key first (§ 6.3), and check the
    SHA-256.
@@ -1595,20 +1666,20 @@ starts allowing Android and Google Play):
 2. **What it does › Log a meal:** add "on Android, **+ Log** › *From
    recent photos* opens Android's photo picker, which needs no access to
    your whole library; or share a photo into Chopstats from Google Photos
-   or another app". <!-- depends: photos -->
+   or another app". <!-- gated: release_decisions_test (system_photo_picker.dart and its use in add_flow.dart) -->
 3. **What it does › Watch Camera Roll:** add "(iPhone; not in the Google
    Play version)".
 4. **Getting started, step 2:** "it is kept in the iOS Keychain on this
    phone" becomes "on iPhone it is kept in the iOS Keychain; on Android in
    encrypted storage protected by the Android Keystore, which Android's
-   backup and device transfer leave out". <!-- depends: native (the secure-storage files excluded from backup and transfer) -->
+   backup and device transfer leave out". <!-- gated: release_decisions_test (the FlutterSecureStorage exclusions in res/xml) -->
 5. **Troubleshooting › Watch Camera Roll misses photos:** add that the
    Google Play version has no Watch Camera Roll.
 6. **Your data:** under **Export Data…**, add "on Android, **Save to
-   device…** saves the file to a folder you pick"; under Delete
+   Device…** saves the file to a folder you pick"; under Delete
    everything, add that on Android uninstalling removes the API keys too
    (unlike the iOS Keychain), and that Android may offer to keep the
-   app's data. <!-- depends: privacy (the Save to device… label), native (hasFragileUserData) -->
+   app's data. <!-- depends: native (hasFragileUserData, the "keep app data" uninstall option) -->
 7. **Contact:** keep GitHub issues; add "or the developer email shown on
    Chopstats' Google Play page".
 
@@ -1741,7 +1812,7 @@ to `app/android/`; locally, check the file path and the `storeFile` value.
 **"ANDROID_KEYSTORE_PASSWORD does not open the keystore" / "ANDROID_KEY_PASSWORD
 does not unlock key"** — the secret holds the wrong password, or the alias
 is not `upload` (set the `ANDROID_KEY_ALIAS` variable). On the Mac,
-`keytool -list -keystore ~/upload-keystore.jks -alias upload` reproduces
+`keytool -list -keystore <the upload keystore> -alias upload` reproduces
 the first one.
 
 **Play: "The Android App Bundle was signed with the wrong key"** — the

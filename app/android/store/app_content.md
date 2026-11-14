@@ -1,6 +1,7 @@
 # Google Play App content: the answers for Chopstats
 
-Paste-ready answers for **Play Console › Policy › App content**, written
+Paste-ready answers for **Play Console › Monitor and improve › Policy and
+programs › App content**, written
 2026-11-13 for the first Google Play release (1.7.0), with the owner's
 decisions of that day: no broad photo access on Play (decision 1),
 `http://` servers refused (decision 2), one signing key for Play and the
@@ -72,13 +73,27 @@ with the demo key.
 Demo key (Gemini, budget-capped): <the demo key from the owner's release notes>
 ```
 
-<!-- depends: photos (the Android path "Log › From recent photos" → consent → system photo picker, and the row's label, as the photos lane ships them) -->
+<!-- gated: release_decisions_test (system_photo_picker.dart and its use in add_flow.dart); the row stays "From recent photos" (addFromPhotos) -->
 
 Before each review, run the steps above once on a phone with the build
 you submit, and check every quoted label against it. The demo key must
 stay on a billing-enabled Google Cloud project with a low daily request
 quota and a budget alert: Gemini's free tier can run out mid-review, is
 not offered in every region, and Google may use free-tier inputs.
+
+**Owner note, not a change to the plan: the Gemini API terms.** Google's
+Gemini API Additional Terms of Service
+(<https://aistudio.google.com/docs/terms>, read by the plan's verifier on
+2026-11-13, effective 2026-03-23) say, as the verifier summarized them:
+the API is for developers building for professional or business purposes,
+not for consumer use; do not send sensitive or personal information to the
+Unpaid Services (the free tier), whose inputs Google may use and have
+reviewed by people; and only Paid Services may be offered to users in the
+EEA, Switzerland or the UK. That bears on a consumer app whose default
+provider is Gemini and whose users bring their own (often free-tier) keys,
+and on the demo key, which should stay a paid key. Re-read the terms
+yourself before relying on this summary; nothing in the app or the plan
+changes because of it today.
 
 ## Content rating
 
@@ -137,9 +152,11 @@ permission), so the per-data-type screen stays empty.
 The Health Content and Services policy also wants, for a health app that
 is not a medical device, Google's disclaimer in the store description and
 a reminder to consult a healthcare professional. Both full descriptions
-in `metadata/` end with them, and Settings › Your Data shows the same two
-sentences in the app.
-<!-- depends: privacy (the in-app health footer in Settings › Your Data) -->
+in `metadata/` end with them. From 1.7.0 the app reminds users too: Settings
+› Your Data ends with "Chopstats is not medical advice. For decisions about
+your health or diet, consult a healthcare professional." (`settingsHealthReminder`,
+in English and Chinese).
+<!-- gated: release_decisions_test (settingsHealthReminder in app_en.arb and app_zh.arb) -->
 
 ## Data safety
 
@@ -199,7 +216,7 @@ zh-CN:
 
 > • 也可以打开「监控相册」（可选，默认关闭）：新的食物照片会自动记录。每张新照片（包括不是食物的照片）都会发送给你的 AI 服务，由它判断是不是一餐。后台扫描由 Android 决定何时运行，打开应用时会补扫。
 
-### Declaration text (Policy › App content › Photo and video permissions)
+### Declaration text (App content › Photo and video permissions)
 
 > Chopstats logs meals from food photos. With Watch Camera Roll, which
 > the user turns on in Settings after a notice that names the AI service

@@ -1,7 +1,7 @@
 # Google Play Data safety: the answers for Chopstats
 
-Paste-ready answers for **Play Console › Policy › App content › Data
-safety**, written 2026-11-13 for the first Google Play release (1.7.0).
+Paste-ready answers for **Play Console › Monitor and improve › Policy and
+programs › App content › Data safety**, written 2026-11-13 for the first Google Play release (1.7.0).
 The console moves things around: match the meaning of each question, not
 its position. `docs/RELEASING.md` § 6.5 says where this fits; the App
 Store's own label is a different form with different definitions
@@ -16,8 +16,11 @@ Store's own label is a different form with different definitions
    "Shared: No" would then also rest on the camera-roll notice.
 2. **The build must refuse plain `http://` server addresses** (owner
    decision 2, 2026-11-13). "Encrypted in transit: Yes" is true only
-   then. Check that the build you upload has the switch on.
-   <!-- depends: privacy (kRequireHttpsServer = true in lib/core/server_transport.dart in the uploaded build) -->
+   then: `app/lib/core/server_transport.dart` must say
+   `kRequireHttpsServer = true` at the commit the bundle was built from.
+   release.yml's Android job stops before building otherwise, and
+   `docs/RELEASING.md` § 6.8 step 8 has you check it.
+   <!-- gated: release_decisions_test and release.yml's Android job check kRequireHttpsServer = true -->
 3. Google requires the form for closed testing, open testing and
    production; an app that is only on internal testing is exempt. Fill it
    in before the first closed-test release.
@@ -45,12 +48,26 @@ read 2026-11-13):
   example, Google's unpaid Gemini tier may use inputs to improve its
   products, with human review). So the answer is "No".
 - **Optional** means users can choose whether the data is collected, or
-  can use the app without it. Every send in Chopstats is the user's
-  choice (consent dialog, picking or sharing a photo, typing a request),
-  and the app works without AI (Enter manually, My usual foods), so each
-  type below is "optional". AI estimates are still the main feature; a
-  stricter reading would mark Photos and Health info "required". Either
-  is allowed; "optional" is the answer here.
+  can use the app without it. The same help page says the opposite case
+  is **required**: data the app's primary functionality needs, which users
+  cannot turn off (paraphrased; the page's wording, read 2026-11-13, is
+  the reference). Why "optional" holds here:
+  - every send is the user's choice: the consent dialog before anything
+    goes to a recipient, then picking or sharing a photo, or typing a
+    request;
+  - **Photos:** meals are logged without any photo, by *Describe a meal*
+    (text only) or *Enter manually*, so the core function, a calorie log,
+    does not need photos;
+  - **Health info, Fitness info, Other user-generated content:** *Enter
+    manually* and *My usual foods* log meals with no AI call at all, so
+    nothing leaves the phone, and Body and History work on what is
+    already there;
+  - **Approximate location:** only with Restaurant nutrition lookups,
+    which are off by default.
+
+  AI estimates are still the headline feature, so a stricter reading
+  would mark Photos and Health info "required". Either is allowed;
+  "optional" is the answer here. Keep the same answer in every update.
 
 ## Section 1: Data collection and security
 

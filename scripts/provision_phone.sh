@@ -7,7 +7,7 @@
 # phone. With no phone attached it prints a QR to scan with the camera.
 #
 # Env file (default ~/.bitewise/server.env, chmod 600, NOT in the repo):
-#   SERVER_URL=http://your.server        # origin only; the app appends /api/...
+#   SERVER_URL=https://your.server.example   # origin only, https only; the app appends /api/...
 #   UPLOAD_KEY=...                       # the server's ANDROID_API_KEY
 #   BACKEND=claude                       # claude | glm | doubao (optional)
 #
@@ -21,6 +21,9 @@ SERVER_URL=""; UPLOAD_KEY=""; BACKEND="claude"
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 [[ -n "$SERVER_URL" && -n "$UPLOAD_KEY" ]] || { echo "SERVER_URL and UPLOAD_KEY are required in $ENV_FILE" >&2; exit 1; }
+# From 1.7.0 the app refuses a setup link whose server is not https://
+# (app/lib/core/server_transport.dart): such a link would set up nothing.
+[[ "$SERVER_URL" == https://* ]] || { echo "SERVER_URL in $ENV_FILE must start with https:// — Chopstats refuses plain-http servers (docs/SERVER_TLS.md sets up https)" >&2; exit 1; }
 
 urlenc() { python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
 LINK="bitewise://setup?server=$(urlenc "$SERVER_URL")&key=$(urlenc "$UPLOAD_KEY")&backend=$(urlenc "$BACKEND")"

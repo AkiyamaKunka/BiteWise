@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Google Play graphics for Chopstats, made from the app icon.
 
-    python3 scripts/play_graphics.py                # store icon + feature graphics, then --verify
+    python3 scripts/play_graphics.py --cjk-font-dir DIR   # store icon + feature graphics, then --verify
     python3 scripts/play_graphics.py --launcher     # also the adaptive icon's layers in app/assets/
     python3 scripts/play_graphics.py --verify       # check the committed files only (no fonts needed)
     python3 scripts/play_graphics.py --check-shots DIR [--fix]   # Play's screenshot rules
@@ -27,9 +27,18 @@ feature graphic 1024 x 500, JPEG or 24-bit PNG with no alpha (required to
 publish); screenshots JPEG or 24-bit PNG with no alpha, each side 320 to
 3840 px, the long side at most twice the short side.
 
-Needs Python 3 with Pillow. The feature graphics use the Mac's own fonts
-(SF Pro, Hiragino Sans GB); nothing is downloaded. --verify and
---check-shots need no fonts.
+Needs Python 3 with Pillow. The feature graphics use only fonts whose
+licences allow it, and nothing is downloaded:
+- Roboto (Apache-2.0) for Latin text, from the Flutter SDK's own copy
+  (<flutter>/bin/cache/artifacts/material_fonts/, found from `flutter` on
+  PATH, $FLUTTER_ROOT, or --latin-font-dir);
+- Noto Sans SC (SIL Open Font License 1.1) for 筷拍 and the Chinese
+  tagline: NotoSansSC-Regular and NotoSansSC-Bold (.otf or .ttf) in
+  --cjk-font-dir, ~/Library/Fonts or /Library/Fonts. The script stops,
+  naming the font, if they are missing.
+The Mac's own system fonts are not used: their
+licences do not cover artwork like this. --verify and --check-shots need
+no fonts.
 """
 
 from __future__ import annotations
@@ -76,8 +85,8 @@ TAGLINE = {
     "en-US": "Snap a meal. Get the numbers.",
     "zh-CN": "拍下这一餐，热量一目了然",
 }
-SF_PRO = Path("/System/Library/Fonts/SFNS.ttf")
-HIRAGINO = Path("/System/Library/Fonts/Hiragino Sans GB.ttc")
+ROBOTO = ("Roboto-Bold.ttf", "Roboto-Medium.ttf")
+NOTO_SC = ("NotoSansSC-Bold", "NotoSansSC-Regular")
 
 MAX_ICON_BYTES = 1024 * 1024
 SHOT_MIN, SHOT_MAX = 320, 3840
@@ -181,16 +190,49 @@ def store_icon(icon: Image.Image) -> Image.Image:
     return icon.convert("RGB").resize((512, 512), Image.LANCZOS).convert("RGBA")
 
 
-def _font(path: Path, size: int, *, weight: str | None = None, index: int = 0):
-    if not path.exists():
-        raise SystemExit(f"font {path} not found: render the feature graphics on a Mac")
-    font = ImageFont.truetype(str(path), size, index=index)
-    if weight:
-        font.set_variation_by_name(weight)
-    return font
+def _flutter_fonts() -> list[Path]:
+    """Where the Flutter SDK keeps Roboto: $FLUTTER_ROOT, or the SDK the
+    `flutter` on PATH belongs to."""
+    import os
+    import shutil
+
+    roots = []
+    if os.environ.get("FLUTTER_ROOT"):
+        roots.append(Path(os.environ["FLUTTER_ROOT"]))
+    exe = shutil.which("flutter")
+    if exe:
+        roots.append(Path(exe).resolve().parent.parent)  # <sdk>/bin/flutter
+    return [r / "bin" / "cache" / "artifacts" / "material_fonts" for r in roots]
 
 
-def feature_graphic(foreground: Image.Image, lang: str) -> Image.Image:
+def find_fonts(latin_dir: Path | None, cjk_dir: Path | None) -> dict[str, Path]:
+    """The four font files the feature graphics use, or SystemExit naming
+    what is missing. Never a font whose licence does not allow it."""
+    latin_dirs = ([latin_dir] if latin_dir else []) + _flutter_fonts()
+    cjk_dirs = ([cjk_dir] if cjk_dir else []) + [
+        Path.home() / "Library" / "Fonts", Path("/Library/Fonts")]
+    found = {}
+    for name in ROBOTO:
+        hit = next((d / name for d in latin_dirs if (d / name).is_file()), None)
+        if hit is None:
+            raise SystemExit(f"{name} (Roboto, Apache-2.0) not found: run where the "
+                             "Flutter SDK is installed, or pass --latin-font-dir")
+        found[name] = hit
+    for stem in NOTO_SC:
+        hit = next((d / (stem + ext) for d in cjk_dirs for ext in (".otf", ".ttf")
+                    if (d / (stem + ext)).is_file()), None)
+        if hit is None:
+            raise SystemExit(f"{stem}.otf (Noto Sans SC, SIL OFL 1.1) not found: pass "
+                             "--cjk-font-dir with the Noto Sans SC Regular and Bold files")
+        found[stem] = hit
+    return found
+
+
+def _font(path: Path, size: int):
+    return ImageFont.truetype(str(path), size)
+
+
+def feature_graphic(foreground: Image.Image, lang: str, fonts: dict[str, Path]) -> Image.Image:
     """1024 x 500, drawn at 2x and reduced: the mark on the left, the name
     and the App Store's first caption on the right, kept inside a 64 px
     margin (Play may crop the edges). The text shrinks until it fits."""
@@ -203,12 +245,12 @@ def feature_graphic(foreground: Image.Image, lang: str) -> Image.Image:
     left = 80 * s
     x = left + mark.width + 56 * s
     for size in range(72, 40, -2):
-        name = _font(SF_PRO, size * s, weight="Bold")
-        zh_name = _font(HIRAGINO, round(size * 0.92) * s, index=2)
+        name = _font(fonts["Roboto-Bold.ttf"], size * s)
+        zh_name = _font(fonts["NotoSansSC-Bold"], round(size * 0.92) * s)
         if lang == "zh-CN":
-            tag = _font(HIRAGINO, round(size * 0.5) * s, index=0)
+            tag = _font(fonts["NotoSansSC-Regular"], round(size * 0.5) * s)
         else:
-            tag = _font(SF_PRO, round(size * 0.52) * s, weight="Medium")
+            tag = _font(fonts["Roboto-Medium.ttf"], round(size * 0.52) * s)
         probe = ImageDraw.Draw(Image.new("RGB", (1, 1)))
         gap = round(size * 0.22) * s
         name_w = (probe.textlength("Chopstats", font=name) + gap
@@ -333,11 +375,17 @@ def main(argv=None) -> int:
                     help="check the screenshots in DIR against Play's rules")
     ap.add_argument("--fix", action="store_true",
                     help="with --check-shots: drop the alpha channel of PNG screenshots in place")
+    ap.add_argument("--latin-font-dir", type=Path, metavar="DIR",
+                    help="a folder with Roboto-Bold.ttf and Roboto-Medium.ttf "
+                         "(default: the Flutter SDK's material_fonts)")
+    ap.add_argument("--cjk-font-dir", type=Path, metavar="DIR",
+                    help="a folder with NotoSansSC-Regular and NotoSansSC-Bold (.otf or .ttf)")
     args = ap.parse_args(argv)
 
     if args.check_shots:
         return check_shots(args.check_shots, args.fix)
     if not args.verify:
+        fonts = find_fonts(args.latin_font_dir, args.cjk_font_dir)
         icon = Image.open(APP_ICON)
         if icon.size != (1024, 1024):
             raise SystemExit(f"{APP_ICON} is {icon.size}, expected 1024x1024")
@@ -350,7 +398,7 @@ def main(argv=None) -> int:
         store_icon(icon).save(STORE_ICON, optimize=True)
         print(f"wrote {STORE_ICON.relative_to(ROOT)}")
         for lang, path in FEATURE.items():
-            feature_graphic(foreground, lang).save(path, optimize=True)
+            feature_graphic(foreground, lang, fonts).save(path, optimize=True)
             print(f"wrote {path.relative_to(ROOT)}")
     problems = verify()
     for p in problems:

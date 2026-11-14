@@ -211,6 +211,12 @@ bool _githubTagMatches(String pattern, String tag) {
   return RegExp(re.toString()).hasMatch(tag);
 }
 
+/// The privacy policy's effective date, in one place: docs/PRIVACY.md's
+/// "Effective date:" line must say the same. Whoever merges a branch that
+/// changes the policy sets both to the merge date (docs/RELEASING.md § 6.8);
+/// this pin can only check that they agree, not that the date is new.
+const kPolicyEffectiveDate = '2026-11-13';
+
 void main() {
   group('R-F8: App Privacy answer B in the manifests', () {
     test('the plist reader reads what it should', () {
@@ -557,8 +563,13 @@ void main() {
       // The Google Play release (android/release, 2026-11-13) changed it
       // again: Who we are, adults only, https only, and Android's backup
       // leaving the keys out. If that branch merges on a later day, set the
-      // date and this pin to the merge date.
-      expect(policy, contains('Effective date: 2026-11-13'));
+      // date and kPolicyEffectiveDate to the merge date.
+      expect(
+          RegExp(r'^Effective date: (\S+)$', multiLine: true)
+              .allMatches(policy)
+              .map((m) => m.group(1))
+              .toList(),
+          [kPolicyEffectiveDate]);
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));
@@ -621,7 +632,8 @@ void main() {
 
     // Google Play's User Data policy wants the developer and a privacy
     // contact in the policy (answer/10144311). Nothing personal is written
-    // here: the policy points at the store pages and the support page.
+    // here: the policy points at the store pages and GitHub issues, not at
+    // the iPhone-only support page.
     test('Who we are: the store pages and a contact, adults only, '
         'in English and 中文', () {
       final flat = policy.replaceAll(RegExp(r'\s+'), ' ');
@@ -630,7 +642,14 @@ void main() {
       expect(flat, contains("the developer email shown on Chopstats' Google "
           'Play page'));
       expect(flat, contains('筷拍 Google Play 页面上显示的开发者邮箱'));
-      expect(policy, contains('(SUPPORT.md#contact)'));
+      final who = flat.substring(
+          flat.indexOf('### Who we are'), flat.indexOf('### What stays'));
+      expect(who, contains('https://github.com/AkiyamaKunka/Chopstats/issues'));
+      expect(who, isNot(contains('SUPPORT.md')));
+      final zhWho = flat.substring(
+          flat.indexOf('### 我们是谁'), flat.indexOf('### 留在你手机上的数据'));
+      expect(zhWho, contains('https://github.com/AkiyamaKunka/Chopstats/issues'));
+      expect(zhWho, isNot(contains('SUPPORT.md')));
       expect(flat, contains('Chopstats is meant for adults (18 and over).'));
       expect(flat, contains('筷拍面向成年人（18 岁及以上）'));
       // No address of its own: the one public address lives on the
@@ -641,19 +660,26 @@ void main() {
     });
 
     // Owner decision 2 (2026-11-13): plain http:// server addresses are
-    // refused everywhere, so nothing goes unencrypted.
-    test('your own server is https only, in English and 中文', () {
+    // refused everywhere from 1.7.0, so nothing goes unencrypted. The
+    // policy is also the App Store's for every 1.6.x copy, which still
+    // accepts http://, so it says from which version (review finding M1).
+    test('your own server is https only from 1.7.0, in English and 中文', () {
       final flat = policy.replaceAll(RegExp(r'\s+'), ' ');
       expect(
           flat,
-          contains('The address must start with `https://`: the app refuses '
-              'an `http://` address and sends nothing to it'));
+          contains('From version 1.7.0 the address must start with '
+              '`https://`: the app refuses an `http://` address and sends '
+              'nothing to it'));
+      expect(flat, contains('(Earlier versions also accepted an `http://` address'));
       expect(flat,
-          contains('服务器地址必须以 `https://` 开头：应用会拒绝 `http://` 地址'));
+          contains('从 1.7.0 版本起，服务器地址必须以 `https://` 开头：应用会拒绝 '
+              '`http://` 地址'));
       expect(flat,
-          contains('Every request leaves the phone over an encrypted HTTPS '
-              'connection.'));
-      expect(flat, contains('所有请求都通过加密的 HTTPS 连接离开手机。'));
+          contains('From version 1.7.0, every request leaves the phone over an '
+              'encrypted HTTPS connection.'));
+      expect(flat, contains('从 1.7.0 版本起，所有请求都通过加密的 HTTPS 连接离开手机。'));
+      expect(flat, contains('From version 1.7.0, on Android, API keys'));
+      expect(flat, contains('从 1.7.0 版本起，在 Android 上，API Key'));
       expect(flat,
           isNot(contains('over `http://` lookups use printed brands only')));
     });
@@ -714,7 +740,7 @@ void main() {
               'diagnosis, or treatment.'));
       final zh = listing('zh-CN', 'full_description').trim();
       expect(zh, contains('筷拍不是医疗器械，不能诊断、治疗、治愈或预防任何疾病。'));
-      expect(zh, endsWith('如需医疗建议、诊断或治疗，请咨询医疗专业人员。'));
+      expect(zh, endsWith('如需医疗建议、诊断或治疗，请咨询医疗专业人士。'));
     });
 
     // Android facts only; nothing the first Play build lacks (decision 1:
@@ -733,6 +759,15 @@ void main() {
               reason: '$locale/$name');
         }
       }
+    });
+
+    // Review L5: the listing says what Data safety declares as approximate
+    // location: a lookup carries the country code US.
+    test('the restaurant line names the country code a lookup sends', () {
+      expect(listing('en-US', 'full_description'),
+          contains('chain and food names and the country code US'));
+      expect(listing('zh-CN', 'full_description'),
+          contains('连锁店和食物名称以及国家代码 US'));
     });
 
     test("names the app's controls as the app does", () {
@@ -1049,6 +1084,64 @@ void main() {
         en.settingsRowExport,
       ]) {
         expect(s69, contains(label), reason: label);
+      }
+    });
+  });
+  group('review fixes: release.yml, scripts and § 6', () {
+    final workflow = _readRepo('.github/workflows/release.yml');
+
+    // M2: Data safety's "encrypted in transit" rests on the https switch;
+    // the Android job refuses to build without it.
+    test('the Android job checks kRequireHttpsServer before it builds', () {
+      const step = '- name: Check the app refuses plain-http servers';
+      expect(workflow, contains(step));
+      expect(workflow,
+          contains("grep -Eq '^const bool kRequireHttpsServer = true;' \"\$f\""));
+      final android = workflow.substring(workflow.indexOf('  android:'));
+      expect(android.indexOf(step), greaterThan(0));
+      expect(android.indexOf(step),
+          lessThan(android.indexOf('- name: Build the signed app bundle')));
+    });
+
+    // L11: a later v1.7.0's generated notes must not start from the
+    // hand-made android-v1.7.0 release.
+    test('generated release notes start at the previous v* release', () {
+      expect(workflow, contains('--notes-start-tag "\$prev"'));
+      expect(workflow, contains("grep -E '^v[0-9]'"));
+    });
+
+    test('the setup-link script takes https servers only', () {
+      final script = _readRepo('scripts/provision_phone.sh');
+      expect(script, isNot(contains('SERVER_URL=http://')));
+      expect(script, contains(r'[[ "$SERVER_URL" == https://* ]]'));
+    });
+
+    // L9: Apple's system fonts are not licensed for artwork like this.
+    test('the feature graphics use Roboto and Noto Sans SC only', () {
+      final script = _readRepo('scripts/play_graphics.py');
+      for (final apple in ['/System/Library/Fonts', 'SFNS', 'Hiragino', 'PingFang']) {
+        expect(script, isNot(contains(apple)), reason: apple);
+      }
+      expect(script, contains('Roboto-Bold.ttf'));
+      expect(script, contains('NotoSansSC-Bold'));
+    });
+
+    test('§ 6 has the review fixes', () {
+      final releasing = _readRepo('docs/RELEASING.md');
+      final flat = releasing.replaceAll(RegExp(r'\s+'), ' ');
+      expect(releasing, isNot(contains('~/upload-keystore.jks')));
+      for (final fact in [
+        'adi-registration.properties',
+        'keytool -list -v -keystore <that keystore> -alias upload',
+        'the log of the **v1.6.0** Release run',
+        '**Done; never regenerate it.**',
+        '*Request upload key reset* does not fix (it only replaces the key you upload with)',
+        '`hotfix/*`',
+        'Monitor and improve › Policy and programs › App content',
+        'kRequireHttpsServer = true` at the run\'s commit',
+        'kPolicyEffectiveDate',
+      ]) {
+        expect(flat, contains(fact), reason: fact);
       }
     });
   });
