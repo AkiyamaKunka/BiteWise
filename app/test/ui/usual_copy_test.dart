@@ -162,8 +162,12 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (leftoverLoadFailed, leftoverSaveFailed), then Android's system photo
 /// picker (addChooseAllPhotos, addPickerNote, addPickerUnavailable) and
 /// the note for a photo older than the dating window
-/// (addOldPhotoLoggedToday).
-const _keyCount = 894;
+/// (addOldPhotoLoggedToday), then the Android background lane's block
+/// (summaryBatteryRestrictedHint, notificationsAllowAction,
+/// notificationMealChannelName/Description, watcherAllowAllPhotos,
+/// coachWeekday, coachTitleOnDay, coachEmptyOnDay, diagBgRunNotFinished,
+/// watcherLimitedFooterIos).
+const _keyCount = 904;
 
 Directory _appRoot() {
   var dir = Directory.current;

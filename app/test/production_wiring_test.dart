@@ -729,6 +729,133 @@ void main() {
     });
   });
 
+  // Play push, 2026-11-13: Android's summary is an OS card too (an
+  // inexact alarm), armed and re-armed like the iPhone's; it used to come
+  // from a Timer or the 30-minute photo job, late or never.
+  group('the daily summary is an OS card on both phones', () {
+    test('di.dart arms it on Android too, posting a card left past its '
+        'slot first, and the shell and slot edits re-arm it', () {
+      final init = _body(
+        _source('lib/ui/di.dart'),
+        'static Future<AppServices> init(',
+        indent: '  ',
+      );
+      expect(
+        init,
+        _wired(
+          r'final osSchedulesSummary = Platform\.isIOS \|\| Platform\.isAndroid;',
+        ),
+      );
+      expect(
+        init,
+        _wired(
+          r'Future<void> armOsSummary\(\) => armOsDailySummary\( dao: dao, '
+          r'settings: settings, notifier: notifier, '
+          r'android: Platform\.isAndroid\);',
+        ),
+      );
+      expect(
+        init,
+        _wired(
+          r'refreshDailyNotification: osSchedulesSummary \? armOsSummary : null,',
+        ),
+      );
+      expect(
+        init,
+        _wired(
+          r'onReportTimeChanged: osSchedulesSummary \? armOsSummary : null\);',
+        ),
+      );
+    });
+
+    // Android 13+ asks for the notification permission once, in context:
+    // the first meal saved with the app in front is one of the moments
+    // (notification_permission.dart). Never in a background run.
+    test('di.dart asks after a meal saved, while the summary or the '
+        'watcher would notify', () {
+      final init = _body(
+        _source('lib/ui/di.dart'),
+        'static Future<AppServices> init(',
+        indent: '  ',
+      );
+      expect(
+        init,
+        _wired(
+          r'onMealSaved: \(\) \{ signalMealsChanged\(\); '
+          r'if \(appEngineInForeground\(\) && '
+          r'\(settings\.summaryEnabled \|\| settings\.watcherEnabled\)\) \{ '
+          r'unawaited\(askNotificationPermissionOnce\(\)\);',
+        ),
+      );
+      // An upgrader counts as asked: settled right after the settings
+      // load, before anything this launch writes preferences
+      // (notification_permission_test covers what it decides).
+      expect(
+        init,
+        _wired(
+          r'final settings = await AppSettings\.load\(\);\s*'
+          r'(//[^\n]*\n\s*)*await settleNotificationAskAtLaunch\(\);\s*'
+          r'final MealsDao dao = await createMealsDao\(\);',
+        ),
+      );
+      final glue = _source('lib/ui/background_glue.dart');
+      expect(glue, isNot(contains('askNotificationPermissionOnce')));
+      expect(glue, isNot(contains('settleNotificationAskAtLaunch')));
+      expect(glue, isNot(contains('requestNotificationsPermission')));
+      expect(_source('lib/services/report/notifications.dart'),
+          isNot(contains('requestNotificationsPermission')),
+          reason: 'init runs at every start, in every engine');
+    });
+
+    // Review (finding 12b): Settings' notifications-off row asks about the
+    // summary's own channel too (summaryNotificationsEnabled, behaviour-
+    // tested in notifications_test).
+    test('Settings reads whether the summary itself can be delivered', () {
+      expect(
+        _source('lib/ui/di.dart'),
+        _wired(r'notificationsEnabled: notifier\.summaryNotificationsEnabled,'),
+      );
+    });
+
+    // The Play push: meal cards have their own channel, named in the app
+    // language like the summary's, in both engines.
+    test('both engines name both channels in the app language', () {
+      for (final path in ['lib/ui/di.dart', 'lib/ui/background_glue.dart']) {
+        final source = _source(path);
+        expect(
+          source,
+          _wired(
+            r'channelStrings: \(\) => notificationChannelFor\(settings\.appLanguage\), '
+            r'mealChannelStrings: \(\) => '
+            r'mealNotificationChannelFor\(settings\.appLanguage\),',
+          ),
+          reason: path,
+        );
+      }
+    });
+
+    test('the background run re-arms it on both platforms and posts '
+        'nothing itself', () {
+      final glue = _source('lib/ui/background_glue.dart');
+      final after = _body(glue, 'Future<bool> _runAfterLaunch({');
+      // The re-arm itself (fresh settings, both platforms) is behaviour-
+      // tested through rearmSummaryAfterRun; here, that the run uses it,
+      // after the scan, and hands it to Android's deadline.
+      expect(
+        after,
+        _wired(
+          r'inFlight\.rearm = \(\) => rearmSummaryAfterRun\( prefs: prefs, '
+          r'settings: settings, notifier: notifier, openDao: createMealsDao, '
+          r'ios: ios\);',
+        ),
+      );
+      expect(after, _wired(r'\n  await inFlight\.rearm!\(\);'));
+      expect(glue, isNot(contains('postHeadlessSummary')));
+      expect(glue, isNot(contains('maybePostDailySummary')));
+      expect(glue, isNot(contains('showDailySummary')));
+    });
+  });
+
   group('lib/ui/background_glue.dart (the headless run)', () {
     String glue() => _source('lib/ui/background_glue.dart');
     String launch() => _body(glue(), 'Future<bool> runHeadlessBackfill({');
@@ -764,18 +891,32 @@ void main() {
           after(), _wired(r'includeGlasses: \(\) => settings\.watchGlasses, '));
       expect(after(), _wired(r'foodCheck: ios \? foodScoreViaImageIO : null, '));
       expect(after(), _wired(r'glassesCheckLog: recordGlassesCheckLocally, '));
-      expect(after(), _wired(r'budget: ios \? iosBackgroundBudget : null,'));
+      // Android's offer budget too (review 171, Play push).
+      expect(
+        after(),
+        _wired(r'budget: ios \? iosBackgroundBudget : androidBackgroundBudget,'),
+      );
       expect(
         after(),
         _wired(r'pipeline: \(\) async => inFlight\.pipeline = PhotoPipeline\('),
       );
+      // Both platforms go through the wrapper, each with its deadline.
       expect(
         launch(),
         _wired(
-          r'return finishWithinGrant\(run, left: startedAt\.add\(iosRunDeadline\)'
-          r'\.difference\(clock\(\)\), recorder: recorder, abandon: inFlight\.abandon\);',
+          r'final runDeadline = ios \? iosRunDeadline : androidRunDeadline;',
         ),
       );
+      expect(
+        launch(),
+        _wired(
+          r'return finishWithinGrant\(run, left: startedAt\.add\(runDeadline\)'
+          r'\.difference\(clock\(\)\), recorder: recorder, '
+          r'abandon: ios \? inFlight\.abandon : inFlight\.endAtDeadline, '
+          r'abandonLimit: ios \? iosAbandonLimit : androidDeadlineWrapUp\);',
+        ),
+      );
+      expect(launch(), isNot(contains('if (!ios) return run;')));
     });
 
     // G1b: photos other apps imported late, with the budget the scan left.
@@ -815,13 +956,29 @@ void main() {
       expect(
         launch(),
         _wired(
-          r'final inFlight = RunInFlight\( deadline: ios \? '
-          r'startedAt\.add\(iosRunDeadline\) : null, clock: clock\);',
+          r'final inFlight = RunInFlight\( deadline: '
+          r'startedAt\.add\(runDeadline\), clock: clock\);',
         ),
       );
       expect(after(), _wired(r'\n\s*finishBy: inFlight\.deadline,'));
       expect(after(), _wired(r'\n\s*photoOffered: inFlight\.offered,'));
     });
+  });
+
+  // Review 171, C7: the fake schedulers see the policy enableBackgroundScan
+  // asks for; only this line hands it to WorkManager. Without it the plugin
+  // default applies (UPDATE in workmanager_android 0.9.0+2, but a default
+  // can change under an upgrade).
+  test('WorkmanagerScheduler hands the work policy to WorkManager', () {
+    final source = _source('lib/services/photo/background.dart');
+    expect(
+      _body(source, 'class WorkmanagerScheduler implements'),
+      _wired(
+        r'Workmanager\(\)\.registerPeriodicTask\(uniqueName, taskName, '
+        r'frequency: frequency, inputData: inputData, '
+        r'existingWorkPolicy: existingWorkPolicy,',
+      ),
+    );
   });
 
   // Review 171, C4: on Android the photo library keeps a photo imported

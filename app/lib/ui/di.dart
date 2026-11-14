@@ -45,6 +45,7 @@ import '../services/photo/photo_location.dart';
 import '../services/photo/share_intake.dart';
 import '../services/places/places.dart' show MapKitPlaces;
 import '../services/photo/watcher.dart';
+import '../services/report/notification_permission.dart';
 import '../services/report/notifications.dart';
 import '../services/report/daily_summary.dart';
 import '../services/usual/usual_foods.dart';
@@ -92,6 +93,9 @@ class AppServices {
     if (_instance != null) return _instance!;
 
     final settings = await AppSettings.load();
+    // Android: an install from before in-context asking counts as asked —
+    // read before anything this launch writes (notification_permission).
+    await settleNotificationAskAtLaunch();
     final MealsDao dao = await createMealsDao();
     // Any 'processing' ledger row at launch is a crashed run — reclaim it
     // before services start (spec §2.3 single-process simplification).
@@ -139,24 +143,20 @@ class AppServices {
 
     // Notification surface (spec §5.5/§6): init() also performs the runtime
     // permission request (Android 13+ / iOS) — without it every meal card
-    // and daily report is silently dropped. The in-process daily Timer dies
-    // with the process, so re-arm it on every launch (notifications.dart
-    // integrator contract). MUST be fire-and-forget: init() resolves only
-    // when the user answers the permission dialog, and awaiting that here
-    // blocks the first frame indefinitely (found by the iOS E2E hanging
-    // 15 minutes at launch).
-    // dailyBody gets the ARMED SLOT's date: a Timer delivered late (after
-    // overnight suspension) must still report the day it was scheduled
-    // for, not the fresh morning's near-empty totals.
+    // and daily report is silently dropped. MUST be fire-and-forget: init()
+    // resolves only when the user answers the permission dialog, and
+    // awaiting that here blocks the first frame indefinitely (found by the
+    // iOS E2E hanging 15 minutes at launch).
+    // On both phones the summary is an OS card armed below; the Timer and
+    // dailyBody are the fallback for a host with no OS scheduler. dailyBody
+    // gets the ARMED SLOT's date: a Timer delivered late must still report
+    // the day it was scheduled for, not the fresh morning's totals.
     late final ReportNotifier notifier;
     // The coach summary (user request 2026-08-06) replaces the long
     // Telegram-parity report as the notification body: a lock screen wants
-    // one sentence and two numbers, not a full meal table. Both firing
-    // paths — this Timer and the WorkManager heartbeat in
-    // background_glue — call the SAME builder behind the SAME per-date
-    // watermark, so whichever runs first wins and the other no-ops. The
-    // watermark is read FRESH at fire time: the heartbeat writes it from
-    // another isolate, which this isolate's prefs cache would never see.
+    // one sentence and two numbers, not a full meal table. The Timer
+    // fallback posts it behind the per-date watermark, read FRESH at fire
+    // time (another isolate may have written it).
     Future<void> postSummary() async =>
         maybePostDailySummary(DailySummaryDeps(
           dao: dao,
@@ -172,6 +172,8 @@ class AppServices {
       // Read per post: the channel name Android shows in its Settings
       // follows a language switch without a restart.
       channelStrings: () => notificationChannelFor(settings.appLanguage),
+      mealChannelStrings: () =>
+          mealNotificationChannelFor(settings.appLanguage),
       dailyBody: (slotDate) async {
         await postSummary();
         // NULL, not '': postSummary has ALREADY presented the coach summary
@@ -183,18 +185,25 @@ class AppServices {
         return null;
       },
     );
-    // iOS has NO background execution in this app (spec §6: share/picker
-    // only, enableBackgroundScan no-ops, no BGTask ids) and suspends the
-    // process seconds after backgrounding — so the Timer that scheduleDaily
-    // arms never fires unless the app happens to be open at the slot. The
-    // whole August delivery work (catch-up window, watermark) is therefore
-    // Android-only in practice; on iOS the summary simply never arrived
-    // (found 2026-09-28). Hand delivery to the OS: a one-shot card for the
+    // The OS delivers the summary on both phones: a one-shot card for the
     // next slot carrying the summary as it stands NOW, re-armed on launch,
-    // on every lifecycle transition (app.dart) and on slot edits (below).
-    final osSchedulesSummary = Platform.isIOS;
-    Future<void> armOsSummary() =>
-        armOsDailySummary(dao: dao, settings: settings, notifier: notifier);
+    // on every lifecycle transition and meal saved (app.dart), on slot
+    // edits (below) and after each background run (os_summary.dart).
+    // iOS suspends the process seconds after backgrounding, so a Timer
+    // never fired there (found 2026-09-28). Android (Play push,
+    // 2026-11-13) posted from a Timer or the 30-minute, network-constrained
+    // photo job: late, and never offline or in the Rare and Restricted
+    // buckets. Its card is an inexact alarm, within about an hour of the
+    // slot on Android 12+ (later in Doze or battery saver), offline too;
+    // the user's battery 'Restricted' setting blocks it. On Android each
+    // arm also holds the next week's nights, names the day in the title,
+    // and posts a card still pending past its slot (os_summary.dart).
+    final osSchedulesSummary = Platform.isIOS || Platform.isAndroid;
+    Future<void> armOsSummary() => armOsDailySummary(
+        dao: dao,
+        settings: settings,
+        notifier: notifier,
+        android: Platform.isAndroid);
     // Settings' 下次总结 probe waits on this: on a first run init() sits
     // behind the notification-permission dialog, and a probe answered
     // before the arm read null and painted a red 'Not scheduled' over a
@@ -241,8 +250,17 @@ class AppServices {
         dao: dao,
         analyzer: analyzer,
         notify: announce,
-        // Open screens re-query instead of showing pre-save data.
-        onMealSaved: signalMealsChanged,
+        // Open screens re-query instead of showing pre-save data. Android
+        // 13+: the first meal saved with the app in front is the moment to
+        // ask for the notification permission, once — while the summary or
+        // the watcher's cards would use it (notification_permission.dart).
+        onMealSaved: () {
+          signalMealsChanged();
+          if (appEngineInForeground() &&
+              (settings.summaryEnabled || settings.watcherEnabled)) {
+            unawaited(askNotificationPermissionOnce());
+          }
+        },
         // A rejected key / blocked region parks the automatic scan.
         latch: autoScanLatchFor(settings),
         // B14's previous-night candidates, under the consent that says so.
@@ -393,7 +411,7 @@ class AppServices {
     // handles every version and reports limited vs full.
     Future<bool> requestPhotos() => photoLibrary.requestPermission();
     final store = _AppSettingsStore(settings, notifier,
-        // iOS: a slot edit must re-arm the OS card for the new time.
+        // A slot edit must re-arm the OS card for the new time.
         onReportTimeChanged: osSchedulesSummary ? armOsSummary : null);
     // A shared photo waits for the AI consent (App Store 5.1.2(i)) until
     // the app shell can ask; an allowed recipient passes straight through.
@@ -469,7 +487,8 @@ class AppServices {
       // One-click setup links (bitewise://setup?...), see setup_link.dart.
       setupLinks: appLinks.uriLinkStream,
       initialSetupLink: appLinks.getInitialLink,
-      notificationsEnabled: notifier.notificationsEnabled,
+      // The app's notifications, and the summary's own channel (Android).
+      notificationsEnabled: notifier.summaryNotificationsEnabled,
       nextSummaryAt: () async {
         await summaryArmed.future;
         return notifier.scheduledDailyAt();
@@ -481,8 +500,8 @@ class AppServices {
       // BGTaskScheduler refuses every request (error 1, swallowed by the
       // plugin) while Background App Refresh is off — without this the
       // row would say "not run yet" forever and never say why. Android's
-      // counterpart is the user-set 电池 › 受限 bucket, which parks the
-      // periodic WorkManager job (the scan AND the nightly summary).
+      // counterpart is the user-set 电池 › 受限 setting, which parks the
+      // periodic WorkManager job and blocks the summary's alarm too.
       backgroundRefreshEnabled: Platform.isIOS
           ? () async => (await Permission.backgroundRefresh.status).isGranted
           : Platform.isAndroid
@@ -577,21 +596,22 @@ class _AppSettingsStore implements SettingsStore {
   final ReportNotifier _notifier;
   _AppSettingsStore(this._s, this._notifier, {this.onReportTimeChanged});
 
-  /// iOS: re-arm the OS-scheduled summary card when the slot moves or the
-  /// summary is switched back on. Null = Android, the in-process Timer.
+  /// Re-arm the OS-scheduled summary card when the slot moves or the
+  /// summary is switched back on (both phones). Null = a host with no OS
+  /// scheduler: the in-process Timer.
   final Future<void> Function()? onReportTimeChanged;
 
   /// Arm the summary for the current slot on this platform's delivery path.
   Future<void> _rearmSummary() async {
     final rearmOs = onReportTimeChanged;
     if (rearmOs != null) {
-      // iOS: the OS card is the ONLY delivery. Arming the in-process
-      // Timer here too made a suspended app wake the next morning and
-      // post a second, stale 昨天 card on top of the OS one (loop find
+      // The OS card is the ONLY delivery. Arming the in-process Timer here
+      // too made a suspended iPhone wake the next morning and post a
+      // second, stale 昨天 card on top of the OS one (loop find
       // 2026-10-07).
       await rearmOs();
     } else {
-      await _notifier.scheduleDaily(_s.reportTime); // Android: re-arm
+      await _notifier.scheduleDaily(_s.reportTime); // no OS scheduler
     }
   }
 
@@ -767,7 +787,7 @@ class _AppSettingsStore implements SettingsStore {
         await _rearmSummary();
       } else {
         // Both halves: this process's Timer AND the card the OS already
-        // holds (the iOS one-shot) — else tonight's card still fires.
+        // holds (the one-shot) — else tonight's card still fires.
         _notifier.cancelDaily();
         await _notifier.cancelPendingDaily();
       }

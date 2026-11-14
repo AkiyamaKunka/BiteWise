@@ -82,12 +82,14 @@ Widget _settings(
   FakeSettings s, {
   PhotoLibrary? library,
   RestaurantAssistControls? restaurantAssist,
+  Future<void> Function()? openSystemSettings,
 }) => Scaffold(
   body: SettingsScreen(
     settings: s,
     analyzer: FakeAnalyzer(),
     dao: FakeDao(),
     requestPhotoPermission: () async => true,
+    openSystemSettings: openSystemSettings,
     photoLibrary: library,
     lastBackgroundScan: () async => DateTime(2026, 10, 30, 14, 2),
     backgroundRefreshEnabled: () async => true,
@@ -905,6 +907,105 @@ void main() {
         expect(find.textContaining(l.watcherLimitedFooter), findsNothing);
       });
     }
+
+    // The Play push (UX screenshots 18, 19, 21): the Fix led to App info,
+    // three screens from 'Allow all'. On Android it now shows Android
+    // 14+'s own dialog in place (photo_library.dart reselectPhotoAccess),
+    // and App info only when that cannot help.
+    group('Android: fixed in place', () {
+      final l = lookupAppLocalizations(const Locale('en'));
+      final android = TargetPlatformVariant.only(TargetPlatform.android);
+      late int opened;
+      late int reselects;
+      late _AccessLibrary library;
+      tearDown(() => debugReselectPhotoAccess = null);
+
+      Future<void> pumpLimited(WidgetTester tester, PhotoAccessFix answer,
+          {bool watcher = true}) async {
+        opened = 0;
+        reselects = 0;
+        library = _AccessLibrary(full: false);
+        debugReselectPhotoAccess = () async {
+          reselects++;
+          if (answer == PhotoAccessFix.full) library.full = true;
+          return answer;
+        };
+        await pumpApp(
+          tester,
+          _settings(
+            FakeSettings(
+                apiKey: 'k',
+                watcherEnabled: watcher,
+                watcherDisclosureSeen: true),
+            library: library,
+            openSystemSettings: () async => opened++,
+          ),
+          size: const Size(390, 2400),
+        );
+      }
+
+      testWidgets('the link under the footer: Allow all clears the line', (
+        tester,
+      ) async {
+        await pumpLimited(tester, PhotoAccessFix.full);
+        final link = find.byKey(const Key('photosAllowAllLink'));
+        expect(find.text(l.watcherAllowAllPhotos), findsOneWidget);
+        await tester.tap(link);
+        await tester.pumpAndSettle();
+        expect((reselects, opened), (1, 0));
+        expect(find.textContaining(l.watcherLimitedFooter), findsNothing);
+        expect(link, findsNothing);
+      }, variant: android);
+
+      // Review (finding 12a): the line above the link said to go to the
+      // Settings app.
+      testWidgets('the line above the link does not send the user to the '
+          'Settings app', (tester) async {
+        await pumpLimited(tester, PhotoAccessFix.answered);
+        expect(find.textContaining(l.watcherLimitedFooter), findsOneWidget);
+        expect(find.textContaining(l.watcherLimitedFooterIos), findsNothing);
+        expect(find.textContaining('Settings app'), findsNothing);
+      }, variant: android);
+
+      testWidgets('a selection kept is the user\'s answer: no App info, the '
+          'line stays', (tester) async {
+        await pumpLimited(tester, PhotoAccessFix.answered);
+        await tester.tap(find.byKey(const Key('photosAllowAllLink')));
+        await tester.pumpAndSettle();
+        expect((reselects, opened), (1, 0));
+        expect(find.textContaining(l.watcherLimitedFooter), findsOneWidget);
+      }, variant: android);
+
+      testWidgets('withdrawn, below Android 14 or an error → App info, as '
+          'before', (tester) async {
+        await pumpLimited(tester, PhotoAccessFix.openSettings);
+        await tester.tap(find.byKey(const Key('photosAllowAllLink')));
+        await tester.pumpAndSettle();
+        expect((reselects, opened), (1, 1));
+      }, variant: android);
+
+      testWidgets('turning the watcher on: the snackbar\'s Fix reselects too',
+          (tester) async {
+        await pumpLimited(tester, PhotoAccessFix.full, watcher: false);
+        expect(find.byKey(const Key('photosAllowAllLink')), findsNothing,
+            reason: 'the watcher is off');
+        await tester.tap(find.byKey(const Key('watcherToggle')));
+        await tester.pumpAndSettle();
+        expect(find.text(l.watcherLimitedAccess), findsOneWidget);
+        expect(l.watcherLimitedAccess, isNot(contains('SELECTED')));
+        await tester.tap(find.text(l.fixAction));
+        await tester.pumpAndSettle();
+        expect((reselects, opened), (1, 0));
+        expect(find.textContaining(l.watcherLimitedFooter), findsNothing);
+      }, variant: android);
+
+      testWidgets('iOS: no link; Fix still opens Settings', (tester) async {
+        await pumpLimited(tester, PhotoAccessFix.full);
+        expect(find.byKey(const Key('photosAllowAllLink')), findsNothing);
+        expect(find.textContaining(l.watcherLimitedFooterIos), findsOneWidget,
+            reason: 'iOS keeps the line that says where to fix it');
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+    });
 
     testWidgets('turning the watcher on under limited access adds the line', (
       tester,

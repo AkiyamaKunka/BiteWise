@@ -2868,16 +2868,16 @@ abstract class AppLocalizations {
   /// **'🍽️ Leftovers deducted'**
   String get mealCardLeftoverTitle;
 
-  /// Android notification channel name: shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
+  /// The daily summary's Android notification channel (its id is the one every install has had, so the user's settings on it survive; until the Play push it was 'Reports & meals' and also carried the meal cards). Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
   ///
   /// In en, this message translates to:
-  /// **'Reports & meals'**
+  /// **'Daily summary'**
   String get notificationChannelName;
 
-  /// Android notification channel description, shown under the channel name in the system notification settings.
+  /// The daily summary channel's description, shown under its name in the system notification settings.
   ///
   /// In en, this message translates to:
-  /// **'Daily calorie reports and auto-logged meal cards'**
+  /// **'Your calorie summary, at the time you set'**
   String get notificationChannelDescription;
 
   /// No description provided for @dayLoadFailed.
@@ -3729,13 +3729,13 @@ abstract class AppLocalizations {
   /// No description provided for @watcherLimitedAccess.
   ///
   /// In en, this message translates to:
-  /// **'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.'**
+  /// **'Only selected photos are shared, so new food photos won\'t be seen automatically. Allow access to all photos for automatic logging.'**
   String get watcherLimitedAccess;
 
-  /// First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn).
+  /// First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn). On Android it stands alone: the 'Allow access to all photos' link under it fixes it in place (watcherAllowAllPhotos). iOS shows watcherLimitedFooterIos, which starts with this sentence.
   ///
   /// In en, this message translates to:
-  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
+  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically.'**
   String get watcherLimitedFooter;
 
   /// No description provided for @fixAction.
@@ -5458,6 +5458,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t delete. Try again.'**
   String get bodyDeleteFailed;
+
+  /// Settings › Daily summary, Android only: red hint shown while the summary is on and the app's battery usage is set to Restricted (App info › App battery usage), under which Android fires none of the app's alarms, the summary's included. Followed by the 'Open system settings' button. Worded like notificationsOffHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery use is Restricted — the daily summary can\'t be delivered.'**
+  String get summaryBatteryRestrictedHint;
+
+  /// Settings › Daily summary, Android 13+: the button under notificationsOffHint while the app has never asked for the notification permission. Tapping it shows Android's own permission dialog (asked once); after that the button reads openSystemSettings and opens the app's notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications'**
+  String get notificationsAllowAction;
+
+  /// Android notification channel for the cards posted when a meal is logged automatically from the camera roll (and when automatic logging pauses), separate from the daily summary's channel since the Play push. Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu; re-sent in the app language on every post.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged meals'**
+  String get notificationMealChannelName;
+
+  /// The meal-card channel's description, shown under its name in the system notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'A card for each meal logged automatically from your camera roll'**
+  String get notificationMealChannelDescription;
+
+  /// Settings › Photos, Android only: a link under the footer while Watch Camera Roll is on and Photos access is partial. It shows Android 14+'s own dialog to change the selection or allow all photos (App info when that cannot help).
+  ///
+  /// In en, this message translates to:
+  /// **'Allow access to all photos'**
+  String get watcherAllowAllPhotos;
+
+  /// Android daily summary card: the short weekday name of the day the card describes, put in coachTitleOnDay. The weekday is one of mon, tue, wed, thu, fri, sat, sun.
+  ///
+  /// In en, this message translates to:
+  /// **'{weekday, select, mon{Mon} tue{Tue} wed{Wed} thu{Thu} fri{Fri} sat{Sat} sun{Sun} other{}}'**
+  String coachWeekday(String weekday);
+
+  /// Android daily summary card title, naming the day it describes (coachWeekday) instead of 'Today' or 'Yesterday': an inexact alarm can come after midnight, and a card re-fired after a reboot can come the next morning. Same shape as coachTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{day}: {kcal} kcal'**
+  String coachTitleOnDay(String day, String kcal);
+
+  /// Android daily summary card body for a day with nothing logged, under coachTitleOnDay; says 'that day' rather than 'today' because the card may come late. Also the text of the nights armed ahead, which are rebuilt whenever something is logged.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing logged that day. Snap your next meal and it lands here automatically.'**
+  String get coachEmptyOnDay;
+
+  /// Diagnostics › Recent background scans: an entry with no end time that the next scan has not labelled yet — the newest, which may still be running, or may have been stopped by the system since. Once a later scan starts it is labelled and reads diagBgRunKilled. {step} is one of the diagBgStage* words.
+  ///
+  /// In en, this message translates to:
+  /// **'Not finished yet — still running, or stopped since; last step: {step}.'**
+  String diagBgRunNotFinished(String step);
+
+  /// iOS: first line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full; watcherLimitedFooter plus where to fix it (the Settings app). Must start with watcherLimitedFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
+  String get watcherLimitedFooterIos;
 
   /// Android, Log › From recent photos and Leftovers: the button that opens Android's system photo picker, where every photo on the phone can be chosen. Shown under the recent-photos grid when the app has full photo access, and as the screen's one button when it has none.
   ///

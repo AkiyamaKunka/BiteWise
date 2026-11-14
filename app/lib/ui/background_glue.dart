@@ -39,8 +39,9 @@ import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
-import '../services/report/daily_summary.dart';
+import '../l10n/app_localizations.dart';
 import 'coach_strings.dart';
+import 'format.dart' show mealDescription;
 import '../services/settings/app_settings.dart';
 import 'photo_pipeline.dart';
 import 'os_summary.dart';
@@ -106,6 +107,13 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// often analyzed on the server and then cut off unsaved (review,
 /// 2026-10-19).
 const Duration iosBackgroundBudget = Duration(seconds: 15);
+
+/// Android's offer budget (review 171, Play push): past this much of the
+/// run no new photo is offered. WorkManager stops a worker after 10
+/// minutes (long-running work doc) and gives Dart no signal
+/// ([androidRunDeadline]); one Claude Plan analysis can be held for up to
+/// about 15 minutes. Counted from the run's start, like iOS's.
+const Duration androidBackgroundBudget = Duration(minutes: 7);
 
 /// When workmanager started this run's headless engine, as an ISO instant:
 /// written natively by the AppDelegate's registrant callback, which
@@ -461,8 +469,10 @@ Future<bool> headlessBackfillWith({
   // already wrote it before loading the settings — one launch, one stamp.
   if (!launchRecorded) await recordBackgroundLaunch(prefs, clock);
   await recorder?.stage(BackgroundRunStage.settings);
-  // Belt and braces: disabling the watcher cancels the job, but a stale
-  // chain must never scan against the user's setting.
+  // Belt and braces: on Android disabling the watcher cancels the job, but
+  // a stale chain must never scan against the user's setting. On iOS the
+  // job stays registered (iCloud Backup, the summary's re-arm), so this is
+  // where a run with the watcher off stops.
   if (!settings.watcherEnabled) {
     await recorder?.finish(BackgroundStop.watcherOff);
     return true;
@@ -542,7 +552,7 @@ Future<bool> headlessBackfillWith({
             o.kind == PhotoOutcomeKind.saved
                 ? l.mealCardAutoTitle
                 : l.mealCardLeftoverTitle,
-            outcomeBody(l, o));
+            mealCardBody(l, o));
       }
       // The intake's safeFrontier is the ONLY persistable value: it is
       // createDate-based (the watermark's timebase), halts at transient
@@ -594,6 +604,37 @@ Future<bool> headlessBackfillWith({
   return true;
 }
 
+/// The body of a background meal card: the meal itself ('Pasta — ~650
+/// kcal'), under a title that already says what happened. It used to be
+/// outcomeBody's snackbar line, which repeats it: 'Meal logged: …' under
+/// 'Meal logged automatically' (Play push, UX screenshot 06). A meal with
+/// no description is named like everywhere else (nlUnnamedMeal); without
+/// a name or calories, the pipeline's summary, then the snackbar line.
+@visibleForTesting
+String mealCardBody(AppLocalizations l, PhotoOutcome o) {
+  final analysis = o.analysis;
+  final raw = o.mealName;
+  final name = raw == null
+      ? null
+      : analysis != null && mealDescription(analysis, fallback: '').isEmpty
+          ? l.nlUnnamedMeal
+          : raw;
+  final kcal = o.kcal;
+  switch (o.kind) {
+    case PhotoOutcomeKind.saved:
+      if (name != null && kcal != null) {
+        return l.outcomeSavedSummary(name, kcal);
+      }
+    case PhotoOutcomeKind.leftoverApplied:
+      final cut = o.deductedKcal;
+      if (name != null && kcal != null && cut != null) {
+        return l.outcomeLeftoverSummary(name, '$cut', kcal);
+      }
+    default:
+  }
+  return o.detail ?? outcomeBody(l, o);
+}
+
 /// How a scan that ran to the end of [headlessBackfillWith] stopped, for
 /// the diagnostics record. The budget first (photos are waiting), then a
 /// pause this run armed (the rest were released), then a scan that died or
@@ -616,47 +657,16 @@ Future<String> _stopReason(BackfillDrain drain,
   return BackgroundStop.done;
 }
 
-/// The Android heartbeat's half of the daily summary: post it when the
-/// slot has passed, that day's is unposted, and the user has not switched
-/// the summary off in Settings. Returns whether a card was presented.
-///
-/// The off switch gates DELIVERY, not the heartbeat: the job stays
-/// registered (see [syncBackgroundScan]) and the photo scan after this
-/// runs regardless. Off opens no database either — a run that has
-/// nothing to say should not take a shot at the shared-handle races.
-/// Before the switch (2026-10-10) this path fired for every install,
-/// every night, watcher and key or not: friends who upgraded from the
-/// Timer-only APKs got a "0 kcal" card they never opted into.
-@visibleForTesting
-Future<bool> postHeadlessSummary({
-  required AppSettings settings,
-  required Future<MealsDao> Function() openDao,
-  required Future<void> Function(String title, String body) present,
-  DateTime Function() now = DateTime.now,
-}) async {
-  if (!settings.summaryEnabled) return false;
-  return maybePostDailySummary(DailySummaryDeps(
-    dao: await openDao(),
-    reportTime: settings.reportTime,
-    calorieGoal: settings.calorieGoal,
-    postedDate: await settings.freshSummaryPostedDate(),
-    markPosted: settings.markSummaryPosted,
-    present: present,
-    strings: coachStringsFor(settings.appLanguage),
-    now: now,
-  ));
-}
-
 /// Production assembly for one background run. Mirrors di.dart's startup
 /// EXCEPT reclaimStaleProcessing: that launch sweep assumes it owns the
 /// only pipeline, and the foreground app may be mid-analysis right now —
 /// reclaiming its 'processing' reservation here could double-log a meal.
 ///
-/// Platform split for the daily summary: Android POSTS it from this
-/// heartbeat (the durable path there); iOS instead RE-ARMS the OS card
-/// after the scan, so a meal logged while the app was closed is in the
-/// card the OS delivers at the slot — posting here too would put a second
-/// alert under the same id minutes after the OS one.
+/// The daily summary: after the scan the run RE-ARMS the OS card, on both
+/// platforms, so a meal logged while the app was closed is in the card the
+/// OS delivers at the slot (os_summary.dart). Android used to POST it from
+/// this job instead (2026-08-06 to the Play push), which is why it came
+/// late, or never offline or in the Rare and Restricted buckets.
 ///
 /// The launch marker is written BEFORE the settings load, and a failed load
 /// ends the run as a success. Loading reads every key from the keychain;
@@ -696,8 +706,9 @@ Future<bool> runHeadlessBackfill({
       watermarkBefore:
           readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)),
       bootLead: enteredDart.difference(startedAt));
-  final inFlight = RunInFlight(
-      deadline: ios ? startedAt.add(iosRunDeadline) : null, clock: clock);
+  final runDeadline = ios ? iosRunDeadline : androidRunDeadline;
+  final inFlight =
+      RunInFlight(deadline: startedAt.add(runDeadline), clock: clock);
   final run = _runAfterLaunch(
       ios: ios,
       prefs: prefs,
@@ -705,13 +716,23 @@ Future<bool> runHeadlessBackfill({
       startedAt: startedAt,
       inFlight: inFlight,
       loadSettings: loadSettings);
-  // iOS: the whole run ends inside the grant, whatever it is stuck on.
-  if (!ios) return run;
+  // The whole run ends in its time, whatever it is stuck on: inside iOS's
+  // grant, and before WorkManager's 10-minute stop on Android.
   return finishWithinGrant(run,
-      left: startedAt.add(iosRunDeadline).difference(clock()),
+      left: startedAt.add(runDeadline).difference(clock()),
       recorder: recorder,
-      abandon: inFlight.abandon);
+      abandon: ios ? inFlight.abandon : inFlight.endAtDeadline,
+      abandonLimit: ios ? iosAbandonLimit : androidDeadlineWrapUp);
 }
+
+/// How long iOS's deadline waits for the photo in flight to be released
+/// before replying ([finishWithinGrant]).
+const Duration iosAbandonLimit = Duration(milliseconds: 1500);
+
+/// How long Android's deadline waits for the release and the summary's
+/// re-arm ([RunInFlight.endAtDeadline]): inside the minute between
+/// [androidRunDeadline] and WorkManager's 10-minute stop.
+const Duration androidDeadlineWrapUp = Duration(seconds: 30);
 
 /// How long a photo must have had to itself, before the run's deadline,
 /// for a cut-off to count against it ([DeferredAssets.cutOff]): offered no
@@ -728,13 +749,31 @@ class RunInFlight {
   RunInFlight({this.deadline, DateTime Function()? clock})
       : _clock = clock ?? DateTime.now;
 
-  /// When the run must be over ([iosRunDeadline] from its start); null
-  /// where there is no such deadline (Android).
+  /// When the run must be over ([iosRunDeadline] or [androidRunDeadline]
+  /// from its start); null: no deadline (tests).
   final DateTime? deadline;
   final DateTime Function() _clock;
   PhotoPipeline? pipeline;
   DeferredAssets? deferred;
   DateTime? _offeredAt;
+
+  /// The summary's re-arm ([rearmSummaryAfterRun]), set once the run has
+  /// its settings and notifier: Android's deadline runs it
+  /// ([endAtDeadline]).
+  Future<void> Function()? rearm;
+
+  /// Android's end at [androidRunDeadline]: the photo in flight released
+  /// ([abandon]), then the summary re-armed — the run's own re-arm sits at
+  /// its end, which a run cut short never reaches (review, 2026-11-13).
+  /// Never throws: the reply to WorkManager matters more.
+  Future<void> endAtDeadline() async {
+    try {
+      await abandon();
+    } catch (_) {}
+    try {
+      await rearm?.call();
+    } catch (_) {}
+  }
 
   /// A photo was handed to the pipeline: the one in flight from now on
   /// (the background pipeline takes one photo at a time).
@@ -768,8 +807,8 @@ class RunInFlight {
   }
 }
 
-/// [runHeadlessBackfill] past the launch stamp: settings, the Android
-/// summary, the scan, the iOS summary card.
+/// [runHeadlessBackfill] past the launch stamp: settings, the scan, the
+/// summary card, and on iOS the iCloud Backup.
 Future<bool> _runAfterLaunch({
   required bool ios,
   required SharedPreferences prefs,
@@ -798,27 +837,18 @@ Future<bool> _runAfterLaunch({
   // REPLACE an unread daily report).
   final notifier = ReportNotifier(
       channelStrings: () => notificationChannelFor(settings.appLanguage),
+      mealChannelStrings: () =>
+          mealNotificationChannelFor(settings.appLanguage),
       mealCardIdSeed: 10000 +
           (DateTime.now().millisecondsSinceEpoch ~/ 10000) % 8640000);
-  // The DURABLE daily-summary path. ReportNotifier's in-process Timer
-  // dies with the app, and EMUI kills aggressively — so the notification
-  // the user asked for is delivered by this 30-minute heartbeat instead,
-  // guarded by a freshly read per-date watermark so the live Timer does
-  // not double-post (user request 2026-08-06).
-  if (!ios) {
-    try {
-      await postHeadlessSummary(
-        settings: settings,
-        openDao: createMealsDao,
-        present: (title, body) async {
-          await notifier.init();
-          await notifier.showDailySummary(title, body);
-        },
-      );
-    } catch (_) {
-      // A summary must never take the photo scan down with it.
-    }
-  }
+  // After the scan (below) — or at Android's deadline, should the scan
+  // still be going then (RunInFlight.endAtDeadline).
+  inFlight.rearm = () => rearmSummaryAfterRun(
+      prefs: prefs,
+      settings: settings,
+      notifier: notifier,
+      openDao: createMealsDao,
+      ios: ios);
   final bool ok;
   try {
     ok = await headlessBackfillWith(
@@ -850,7 +880,7 @@ Future<bool> _runAfterLaunch({
         await notifier.init(); // idempotent; deferred until a card exists
         await notifier.showMealCard(title, body);
       },
-      budget: ios ? iosBackgroundBudget : null,
+      budget: ios ? iosBackgroundBudget : androidBackgroundBudget,
       startedAt: startedAt,
       finishBy: inFlight.deadline,
       photoOffered: inFlight.offered,
@@ -865,13 +895,10 @@ Future<bool> _runAfterLaunch({
     await recorder.finish(BackgroundStop.error(e));
     rethrow;
   }
+  // The scan's work is saved either way; a failed re-arm is refreshed at
+  // the next open (rearmSummaryAfterRun never throws).
+  await inFlight.rearm!();
   if (ios) {
-    try {
-      await armOsDailySummary(
-          dao: await createMealsDao(), settings: settings, notifier: notifier);
-    } catch (_) {
-      // The scan's work is saved either way; the card refreshes next open.
-    }
     // iCloud Backup (1.7.0): only a backup this install already owns, only
     // if something changed, with at least 8 s left before the deadline;
     // never a first write, a download or a question here (G8).
@@ -888,8 +915,63 @@ Future<bool> _runAfterLaunch({
   return ok;
 }
 
+/// No key store for [summarySettingsNow]'s read: it reads the summary's
+/// settings, which live in preferences, never a key.
+class _NoKeys implements SecureKeyStore {
+  const _NoKeys();
+  @override
+  Future<String?> read(String key) async => null;
+  @override
+  Future<void> write(String key, String value) async {}
+  @override
+  Future<void> delete(String key) async {}
+}
+
+/// The settings as the open app may have changed them since this run
+/// loaded its own — up to [androidRunDeadline] earlier: the summary's
+/// switch, time, goal and language among them (review, 2026-11-13; the
+/// precedent is AppSettings.reloadAiConsent). Read again from disk through
+/// AppSettings' own loader, which only reads (its one possible write, the
+/// one-time consent seed, depends on the provider alone and is written by
+/// the first load), with no key store: the keys stay out of it. The run's
+/// own copy when the store cannot be read.
+@visibleForTesting
+Future<AppSettings> summarySettingsNow(
+    SharedPreferences prefs, AppSettings loaded) async {
+  try {
+    await prefs.reload();
+    return await AppSettings.load(prefs: prefs, keyStore: const _NoKeys());
+  } catch (_) {
+    return loaded;
+  }
+}
+
+/// The run's re-arm of the summary card, on both platforms, with the
+/// settings as they are now ([summarySettingsNow]); on Android the week
+/// ahead and a card still pending past its slot (os_summary.dart). Never
+/// throws: the scan's work is saved either way, and the next open re-arms.
+@visibleForTesting
+Future<void> rearmSummaryAfterRun({
+  required SharedPreferences prefs,
+  required AppSettings settings,
+  required ReportNotifier notifier,
+  required Future<MealsDao> Function() openDao,
+  required bool ios,
+  DateTime Function() now = DateTime.now,
+}) async {
+  try {
+    await armOsDailySummary(
+        dao: await openDao(),
+        settings: await summarySettingsNow(prefs, settings),
+        notifier: notifier,
+        now: now,
+        android: !ios,
+        prefs: () async => prefs);
+  } catch (_) {}
+}
+
 /// The whole iOS background run, from its start ([backgroundRunStart]),
-/// ends within this (2026-10-19). iOS expires a BGAppRefresh grant about
+/// ends within this (2026-10-19); Android's is [androidRunDeadline]. iOS expires a BGAppRefresh grant about
 /// 30 s after launching it; a run still going then is killed, the task
 /// never completes (workmanager calls setTaskCompleted only on Dart's
 /// reply), its photo stays reserved, and iOS ranks the app lower for the
@@ -906,6 +988,23 @@ Future<bool> _runAfterLaunch({
 /// anyway is released (finishWithinGrant) and offered again by a later
 /// run — behind any older photo still waiting, not necessarily first.
 const Duration iosRunDeadline = Duration(seconds: 22);
+
+/// The whole Android background run, from its start, ends within this
+/// (review 171, Play push). WorkManager stops a ListenableWorker after 10
+/// minutes, and workmanager_android's onStopped then destroys the engine
+/// without a word to Dart (BackgroundWorker.kt): a photo in flight kept
+/// its 'processing' row, and the entry never said why. Ended here instead
+/// ([finishWithinGrant]), the photo is released and the entry says
+/// 'budget'. One minute short of the stop, two after the offer budget
+/// ([androidBackgroundBudget]). Android 16's job quotas can stop a run
+/// sooner still; the next run labels that one
+/// ([BackgroundStop.stoppedBySystem]).
+///
+/// Counted from the run's entry into Dart: Android writes no native launch
+/// stamp, so the engine's boot before it is not counted; the minute short
+/// of the stop covers it, and the deadline's own wrap-up
+/// ([androidDeadlineWrapUp]).
+const Duration androidRunDeadline = Duration(minutes: 9);
 
 /// [run] or, once [left] has passed, an end to the run anyway: the
 /// diagnostics entry says 'budget' and the result is success, so
@@ -970,19 +1069,17 @@ void appBackgroundDispatcher() {
 /// and whenever watcherEnabled/lookbackDays change. Android WorkManager
 /// or iOS BGAppRefresh inside (enableBackgroundScan picks).
 ///
-/// ALWAYS registered, deliberately. The job carries TWO passengers: the
-/// photo backfill and the daily coach summary. Passing watcherEnabled here
-/// cancelled the whole job when the watcher was off, which silently killed
-/// the notification while its own setting still looked enabled — the user
-/// had no way to see why nothing arrived (2026-08-16). The scan half is
-/// already self-guarding (headlessBackfillWith returns early when the
-/// watcher is off), so an always-on job scans nothing extra; it only keeps
-/// the summary's delivery path alive.
-Future<void> syncBackgroundScan(AppSettings settings) =>
-    enableBackgroundScan(true,
-        lookbackDays: settings.lookbackDays,
-        frequency: backgroundScanFrequency,
-        dispatcher: appBackgroundDispatcher);
+/// Android registers it only while Watch Camera Roll is on and cancels it
+/// otherwise; iOS keeps it always ([backgroundJobWanted]). It used to stay
+/// registered on Android with the watcher off, because the job carried the
+/// daily summary too — cancelling it silently killed the notification
+/// (2026-08-16). The summary is an OS alarm now (os_summary.dart), so it
+/// no longer needs the job.
+Future<void> syncBackgroundScan(AppSettings settings) => enableBackgroundScan(
+    backgroundJobWanted(watcherEnabled: settings.watcherEnabled),
+    lookbackDays: settings.lookbackDays,
+    frequency: backgroundScanFrequency,
+    dispatcher: appBackgroundDispatcher);
 
 /// Settings' "the background scan is stuck" probe (2026-10-19): the
 /// stored runs and the watermark, both read FRESH (the background engine

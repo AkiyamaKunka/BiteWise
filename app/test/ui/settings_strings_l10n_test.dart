@@ -50,8 +50,8 @@ const _en = (
       'key is set above.',
   paused: 'Watching is on, but analyses are paused by the daily quota — '
       'new photos will wait.',
-  limited: "Only SELECTED photos are shared, so new food photos won't be "
-      'seen automatically. Grant access to ALL photos for automatic '
+  limited: "Only selected photos are shared, so new food photos won't be "
+      'seen automatically. Allow access to all photos for automatic '
       'logging.',
   fix: 'Fix',
   dialogTitle: 'Import exported data',
@@ -75,7 +75,7 @@ const _zh = (
   noKey: '监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。',
   paused: '监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。',
   limited: '目前只共享了部分选中的照片，新的食物照片不会被自动看到。'
-      '请授予访问所有照片的权限，才能自动记录。',
+      '请允许访问所有照片，才能自动记录。',
   fix: '去修复',
   dialogTitle: '导入已导出的数据',
   dialogBody: '选择导出的文件，或粘贴文件的内容。已有的餐会保留，只会添加新的。',
@@ -242,7 +242,8 @@ void main() {
         await tester.tap(find.text(c.fix));
         await tester.pump();
         expect(opened, 1);
-      });
+        // Android fixes it in place instead (settings_refresh_test).
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
     });
 
     // Design G3: the switch under 监控相册, on by default.
