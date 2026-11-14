@@ -99,8 +99,14 @@ int lookbackDaysFromInput(Object? raw) {
 /// workmanager seam so tests can observe scheduling without a platform.
 abstract class BackgroundScheduler {
   Future<void> initialize(Function dispatcher);
+
+  /// [existingWorkPolicy]: what Android's WorkManager does with a chain
+  /// already registered under [uniqueName]; null leaves the plugin's
+  /// default (and means nothing on iOS).
   Future<void> registerPeriodic(String uniqueName, String taskName,
-      {required Duration frequency, Map<String, dynamic>? inputData});
+      {required Duration frequency,
+      Map<String, dynamic>? inputData,
+      ExistingPeriodicWorkPolicy? existingWorkPolicy});
   Future<void> cancelByUniqueName(String uniqueName);
 }
 
@@ -111,10 +117,13 @@ class WorkmanagerScheduler implements BackgroundScheduler {
 
   @override
   Future<void> registerPeriodic(String uniqueName, String taskName,
-          {required Duration frequency, Map<String, dynamic>? inputData}) =>
+          {required Duration frequency,
+          Map<String, dynamic>? inputData,
+          ExistingPeriodicWorkPolicy? existingWorkPolicy}) =>
       Workmanager().registerPeriodicTask(uniqueName, taskName,
           frequency: frequency,
           inputData: inputData,
+          existingWorkPolicy: existingWorkPolicy,
           // Analyses need Gemini; an offline run can only read bytes for
           // nothing (retryable-release keeps it harmless, but don't wake).
           constraints: Constraints(networkType: NetworkType.connected));
@@ -132,6 +141,21 @@ bool? debugIsAndroidOverride;
 
 @visibleForTesting
 bool? debugIsIOSOverride;
+
+/// Whether the periodic job is wanted at all (review 171, C8).
+///
+/// iOS: always. Its background refresh also carries iCloud Backup and the
+/// summary card's re-arm, and the scan guards itself when the watcher is
+/// off.
+///
+/// Android: only while Watch Camera Roll is on. The daily summary is an OS
+/// alarm there (ui/os_summary.dart) and needs no job, so with the watcher
+/// off a run had nothing to do but boot an engine every 30 minutes, write
+/// its launch stamp and stop. A build without photo watching (a Play
+/// build that hides Watch Camera Roll) passes false for [watcherEnabled]
+/// and never registers the job; the summary is unaffected.
+bool backgroundJobWanted({required bool watcherEnabled}) =>
+    (debugIsIOSOverride ?? Platform.isIOS) || watcherEnabled;
 
 /// Integration-contract registration API. Android and iOS; anything else
 /// (desktop test hosts) is a no-op. On iOS the Dart-side frequency is
@@ -152,11 +176,27 @@ Future<void> enableBackgroundScan(bool on,
   await scheduler.initialize(dispatcher);
   final period =
       frequency < minBackgroundFrequency ? minBackgroundFrequency : frequency;
-  // Cancel-then-register keeps exactly one periodic chain (replace, don't
-  // stack) without depending on workmanager's ExistingWorkPolicy surface.
+  final input = {'lookbackDays': clampLookbackDays(lookbackDays)};
+  if (isAndroid) {
+    // UPDATE, never cancel first (review 171, C7). This runs at every app
+    // start and every lookback or watcher edit, and a cancel STOPS a
+    // worker that is running: workmanager_android's onStopped destroys its
+    // engine, so opening the app — say from that run's own meal card —
+    // killed an upload already paid for and left its row 'processing' for
+    // up to 30 minutes, and re-based the 30-minute cadence on the open.
+    // UPDATE keeps the one chain, lets a running worker finish (the new
+    // spec applies from its next run) and keeps the chain's timing.
+    await scheduler.registerPeriodic(
+        photoBackfillUniqueName, photoBackfillTaskName,
+        frequency: period,
+        inputData: input,
+        existingWorkPolicy: ExistingPeriodicWorkPolicy.update);
+    return;
+  }
+  // iOS: cancel-then-register keeps exactly one BGAppRefresh request.
   await scheduler.cancelByUniqueName(photoBackfillUniqueName);
   await scheduler.registerPeriodic(photoBackfillUniqueName,
       photoBackfillTaskName,
       frequency: period,
-      inputData: {'lookbackDays': clampLookbackDays(lookbackDays)});
+      inputData: input);
 }

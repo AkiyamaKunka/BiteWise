@@ -551,8 +551,10 @@ class _BackgroundRuns extends StatelessWidget {
   }
 }
 
-/// One line on how [r] ended: its stop reason, or — for a run the OS cut
-/// short — the step it was on.
+/// One line on how [r] ended: its stop reason, or — for a run with no end —
+/// the step it was on: 'ended by the system' once a later run has labelled
+/// it so (BackgroundStop.stoppedBySystem), else 'not finished yet' (the
+/// newest may still be running).
 String backgroundRunVerdict(AppLocalizations l, BackgroundRunRecord r) {
   if (!r.finished) {
     final step = switch (r.stage) {
@@ -563,7 +565,9 @@ String backgroundRunVerdict(AppLocalizations l, BackgroundRunRecord r) {
       BackgroundRunStage.checkpoint => l.diagBgStageCheckpoint,
       BackgroundRunStage.done => l.diagBgStageDone,
     };
-    return l.diagBgRunKilled(step);
+    return r.stopReason == BackgroundStop.stoppedBySystem
+        ? l.diagBgRunKilled(step)
+        : l.diagBgRunNotFinished(step);
   }
   final stop = r.stopReason ?? BackgroundStop.done;
   return switch (stop) {

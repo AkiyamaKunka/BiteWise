@@ -91,6 +91,13 @@ final _sites = <_Site>[
     text: _en.watcherLimitedAccess,
     action: _en.fixAction,
     raise: (tester, acted) async {
+      // Android's Fix shows Android's reselect dialog in place (Play push);
+      // the action is what is counted, either way.
+      debugReselectPhotoAccess = () async {
+        acted();
+        return PhotoAccessFix.answered;
+      };
+      addTearDown(() => debugReselectPhotoAccess = null);
       await _pumpSettings(tester,
           settings: FakeSettings(
               apiKey: 'k', watcherEnabled: false, watcherDisclosureSeen: true),

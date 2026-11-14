@@ -643,6 +643,7 @@ void main() {
   // 2026-10-18: what the background scans did, from their own record.
   group('recent background scans', () {
     final t0 = DateTime.utc(2026, 10, 18, 3, 0);
+    // Labelled by the run after it (background_runs.dart).
     final killed = BackgroundRunRecord(
         start: t0,
         platform: 'ios',
@@ -651,6 +652,7 @@ void main() {
         offered: 2,
         analyzed: 1,
         saved: 1,
+        stopReason: BackgroundStop.stoppedBySystem,
         watermarkBefore: DateTime.utc(2026, 10, 11, 2, 26));
     final budget = BackgroundRunRecord(
         start: t0.subtract(const Duration(minutes: 30)),
@@ -700,6 +702,26 @@ void main() {
       expect(find.textContaining('14 s'), findsOneWidget);
       expect(find.text('Stopped by an error (PlatformException).'),
           findsOneWidget);
+    });
+
+    // Review (finding 11): the label was written and never shown.
+    testWidgets('an entry no later run has labelled yet reads "not finished '
+        'yet", not "ended by the system"', (tester) async {
+      final open = BackgroundRunRecord(
+          start: t0.add(const Duration(minutes: 30)),
+          platform: 'android',
+          stage: BackgroundRunStage.scan);
+      await pump(tester, [open, killed]);
+      expect(
+          find.text('Not finished yet — still running, or stopped since; '
+              'last step: listing photos.'),
+          findsOneWidget);
+      expect(
+          find.text('Ended by the system before it finished — last step: '
+              'processing a photo.'),
+          findsOneWidget);
+      final l = AppLocalizationsEn();
+      expect(backgroundRunVerdict(l, open), isNot(contains('Ended')));
     });
 
     testWidgets('in Chinese', (tester) async {

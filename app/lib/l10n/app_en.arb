@@ -1293,13 +1293,13 @@
   "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
   "mealCardAutoTitle": "🍽️ Meal logged automatically",
   "mealCardLeftoverTitle": "🍽️ Leftovers deducted",
-  "notificationChannelName": "Reports & meals",
+  "notificationChannelName": "Daily summary",
   "@notificationChannelName": {
-    "description": "Android notification channel name: shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
+    "description": "The daily summary's Android notification channel (its id is the one every install has had, so the user's settings on it survive; until the Play push it was 'Reports & meals' and also carried the meal cards). Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
   },
-  "notificationChannelDescription": "Daily calorie reports and auto-logged meal cards",
+  "notificationChannelDescription": "Your calorie summary, at the time you set",
   "@notificationChannelDescription": {
-    "description": "Android notification channel description, shown under the channel name in the system notification settings."
+    "description": "The daily summary channel's description, shown under its name in the system notification settings."
   },
   "dayLoadFailed": "Could not load this day: {error}",
   "@dayLoadFailed": {
@@ -1917,10 +1917,10 @@
     }
   },
   "autoScanPausedTitle": "Photos are not being logged automatically",
-  "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
-  "watcherLimitedFooter": "Chopstats can't see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.",
+  "watcherLimitedAccess": "Only selected photos are shared, so new food photos won't be seen automatically. Allow access to all photos for automatic logging.",
+  "watcherLimitedFooter": "Chopstats can't see all your photos, so new photos are not logged automatically.",
   "@watcherLimitedFooter": {
-    "description": "First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn)."
+    "description": "First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn). On Android it stands alone: the 'Allow access to all photos' link under it fixes it in place (watcherAllowAllPhotos). iOS shows watcherLimitedFooterIos, which starts with this sentence."
   },
   "fixAction": "Fix",
   "importDialogTitle": "Import exported data",
@@ -3569,5 +3569,63 @@
         "type": "int"
       }
     }
+  },
+  "summaryBatteryRestrictedHint": "Battery use is Restricted — the daily summary can't be delivered.",
+  "@summaryBatteryRestrictedHint": {
+    "description": "Settings › Daily summary, Android only: red hint shown while the summary is on and the app's battery usage is set to Restricted (App info › App battery usage), under which Android fires none of the app's alarms, the summary's included. Followed by the 'Open system settings' button. Worded like notificationsOffHint."
+  },
+  "notificationsAllowAction": "Allow notifications",
+  "@notificationsAllowAction": {
+    "description": "Settings › Daily summary, Android 13+: the button under notificationsOffHint while the app has never asked for the notification permission. Tapping it shows Android's own permission dialog (asked once); after that the button reads openSystemSettings and opens the app's notification settings."
+  },
+  "notificationMealChannelName": "Logged meals",
+  "@notificationMealChannelName": {
+    "description": "Android notification channel for the cards posted when a meal is logged automatically from the camera roll (and when automatic logging pauses), separate from the daily summary's channel since the Play push. Shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu; re-sent in the app language on every post."
+  },
+  "notificationMealChannelDescription": "A card for each meal logged automatically from your camera roll",
+  "@notificationMealChannelDescription": {
+    "description": "The meal-card channel's description, shown under its name in the system notification settings."
+  },
+  "watcherAllowAllPhotos": "Allow access to all photos",
+  "@watcherAllowAllPhotos": {
+    "description": "Settings › Photos, Android only: a link under the footer while Watch Camera Roll is on and Photos access is partial. It shows Android 14+'s own dialog to change the selection or allow all photos (App info when that cannot help)."
+  },
+  "coachWeekday": "{weekday, select, mon{Mon} tue{Tue} wed{Wed} thu{Thu} fri{Fri} sat{Sat} sun{Sun} other{}}",
+  "@coachWeekday": {
+    "description": "Android daily summary card: the short weekday name of the day the card describes, put in coachTitleOnDay. The weekday is one of mon, tue, wed, thu, fri, sat, sun.",
+    "placeholders": {
+      "weekday": {
+        "type": "String"
+      }
+    }
+  },
+  "coachTitleOnDay": "{day}: {kcal} kcal",
+  "@coachTitleOnDay": {
+    "description": "Android daily summary card title, naming the day it describes (coachWeekday) instead of 'Today' or 'Yesterday': an inexact alarm can come after midnight, and a card re-fired after a reboot can come the next morning. Same shape as coachTitle.",
+    "placeholders": {
+      "day": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "coachEmptyOnDay": "Nothing logged that day. Snap your next meal and it lands here automatically.",
+  "@coachEmptyOnDay": {
+    "description": "Android daily summary card body for a day with nothing logged, under coachTitleOnDay; says 'that day' rather than 'today' because the card may come late. Also the text of the nights armed ahead, which are rebuilt whenever something is logged."
+  },
+  "diagBgRunNotFinished": "Not finished yet — still running, or stopped since; last step: {step}.",
+  "@diagBgRunNotFinished": {
+    "description": "Diagnostics › Recent background scans: an entry with no end time that the next scan has not labelled yet — the newest, which may still be running, or may have been stopped by the system since. Once a later scan starts it is labelled and reads diagBgRunKilled. {step} is one of the diagBgStage* words.",
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
+  "watcherLimitedFooterIos": "Chopstats can't see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.",
+  "@watcherLimitedFooterIos": {
+    "description": "iOS: first line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full; watcherLimitedFooter plus where to fix it (the Settings app). Must start with watcherLimitedFooter."
   }
 }

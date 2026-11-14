@@ -168,8 +168,12 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// Export's six Save to Device lines (exportSheetTitle … exportSaveFailed),
 /// settingsHealthReminder, and the Android backup-size lines
 /// (backupSizeNearLimit, diagBackupSizeTitle, diagBackupSizeLine), then
-/// the review's autoScanNeedsHttps and diagBgStopNeedsHttps.
-const _keyCount = 917;
+/// the review's autoScanNeedsHttps and diagBgStopNeedsHttps; and the
+/// Android background lane's block (summaryBatteryRestrictedHint,
+/// notificationsAllowAction, notificationMealChannelName/Description,
+/// watcherAllowAllPhotos, coachWeekday, coachTitleOnDay, coachEmptyOnDay,
+/// diagBgRunNotFinished, watcherLimitedFooterIos).
+const _keyCount = 927;
 
 Directory _appRoot() {
   var dir = Directory.current;

@@ -1634,10 +1634,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mealCardLeftoverTitle => '🍽️ 已扣除剩菜';
 
   @override
-  String get notificationChannelName => '总结与餐食';
+  String get notificationChannelName => '每日总结';
 
   @override
-  String get notificationChannelDescription => '每日热量总结和自动记录的餐食卡片';
+  String get notificationChannelDescription => '在你设定的时间发送当天的热量总结';
 
   @override
   String dayLoadFailed(String error) {
@@ -2216,11 +2216,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watcherLimitedAccess =>
-      '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。';
+      '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请允许访问所有照片，才能自动记录。';
 
   @override
-  String get watcherLimitedFooter =>
-      '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
+  String get watcherLimitedFooter => '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。';
 
   @override
   String get fixAction => '去修复';
@@ -3349,4 +3348,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String addOldPhotoLoggedToday(String taken, int days) {
     return '这张照片拍摄于 $taken，已超过 $days 天，所以这餐记在了今天。如需记到拍摄当天，请打开这餐修改日期。';
   }
+
+  @override
+  String get summaryBatteryRestrictedHint => '电池使用受限 —— 每日总结无法送达。';
+
+  @override
+  String get notificationsAllowAction => '允许通知';
+
+  @override
+  String get notificationMealChannelName => '自动记录的餐食';
+
+  @override
+  String get notificationMealChannelDescription => '从相册自动记录每一餐时发送的卡片';
+
+  @override
+  String get watcherAllowAllPhotos => '允许访问所有照片';
+
+  @override
+  String coachWeekday(String weekday) {
+    String _temp0 = intl.Intl.selectLogic(weekday, {
+      'mon': '周一',
+      'tue': '周二',
+      'wed': '周三',
+      'thu': '周四',
+      'fri': '周五',
+      'sat': '周六',
+      'sun': '周日',
+      'other': '',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String coachTitleOnDay(String day, String kcal) {
+    return '$day：$kcal 千卡';
+  }
+
+  @override
+  String get coachEmptyOnDay => '当天没有记录。拍下一餐，它会自动出现在这里。';
+
+  @override
+  String diagBgRunNotFinished(String step) {
+    return '尚未完成 —— 仍在运行，或之后被停止；最后一步：$step。';
+  }
+
+  @override
+  String get watcherLimitedFooterIos =>
+      '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
 }

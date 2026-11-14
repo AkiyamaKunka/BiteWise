@@ -21,6 +21,7 @@ import '../../services/backup/backup_coordinator.dart';
 import '../../services/analyzer/platform_decode.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
+import '../../services/report/notification_permission.dart';
 import '../ai_consent.dart';
 import '../photo_pipeline.dart';
 import '../outcome_text.dart' show autoScanPausedLine, dayTimeLabel;
@@ -175,6 +176,12 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// settings). Unknown/null keeps the row hidden.
   bool _notificationsOff = false;
 
+  /// Android: whether the app has asked for the notification permission
+  /// (notification_permission.dart). Until it has, the notifications-off
+  /// row's button asks (Allow notifications); after, it opens the app's
+  /// notification settings. Always true off Android.
+  bool _notificationsAsked = true;
+
   /// The armed daily-summary slot; null once probed = nothing armed.
   DateTime? _nextSummary;
   bool _nextSummaryProbed = false;
@@ -208,15 +215,20 @@ class _SettingsScreenState extends State<SettingsScreen>
     _probePhotoAccess();
   }
 
+  /// The last run, and whether the OS still lets the app work in the
+  /// background. The second is read even without the first: on Android
+  /// the battery 'Restricted' setting also blocks the summary's alarm,
+  /// which the report section says (the Play push, 2026-11-13).
   Future<void> _probeBackgroundScan() async {
     final probe = widget.lastBackgroundScan;
-    if (probe == null) return;
+    final refreshProbe = widget.backgroundRefreshEnabled;
+    if (probe == null && refreshProbe == null) return;
     DateTime? when;
     bool? refresh;
     var stuck = false;
     try {
-      when = await probe();
-      refresh = await widget.backgroundRefreshEnabled?.call();
+      when = await probe?.call();
+      refresh = await refreshProbe?.call();
       stuck = await widget.backgroundScanStuck?.call() ?? false;
     } catch (_) {
       return;
@@ -291,7 +303,21 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!mounted) return;
     final off = enabled == false;
     if (off != _notificationsOff) setState(() => _notificationsOff = off);
+    // Only the button's label waits on this; what it does reads the flag
+    // itself (fixNotificationsOff).
+    if (!off || !notificationPermissionInContext) return;
+    final asked = await notificationPermissionAsked();
+    if (mounted && asked != _notificationsAsked) {
+      setState(() => _notificationsAsked = asked);
+    }
   }
+
+  /// Android 13+: one of the moments to ask for the notification
+  /// permission, once (notification_permission.dart). Not awaited: the
+  /// system dialog is modal on its own, and the flow that asked goes on
+  /// beneath it; the remedy row re-reads the answer.
+  void _askNotificationsInContext() => unawaited(askNotificationPermissionOnce()
+      .then((_) => _probeNotifications(), onError: (Object _) {}));
 
   void _onSettingsChanged() {
     if (mounted) setState(() {});
@@ -378,6 +404,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         return; // leave the switch off
       }
       if (!mounted) return;
+      // Android 13+: the watcher's meal cards are notifications — the
+      // moment to ask, once, after the photo prompt.
+      _askNotificationsInContext();
       // The watcher arms fine without a usable key — it just never logs
       // anything. Flipping a switch that silently does nothing needs a
       // sentence, not silence.
@@ -401,15 +430,16 @@ class _SettingsScreenState extends State<SettingsScreen>
       _photosLimited = limited; // the footer line; setState follows below
       if (limited) {
         if (!mounted) return;
-        final open = widget.openSystemSettings;
+        final canFix =
+            widget.openSystemSettings != null || _fixesPhotoAccessInPlace;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            persist: _holdForScreenReader(context, hasAction: open != null),
+            persist: _holdForScreenReader(context, hasAction: canFix),
             duration: _actionSnackBarDuration,
             content: Text(l10n.watcherLimitedAccess),
-            action: open == null
+            action: !canFix
                 ? null
                 : SnackBarAction(
-                    label: l10n.fixAction, onPressed: () => open())));
+                    label: l10n.fixAction, onPressed: _fixPhotoAccess)));
       }
       // Instant feedback on enable: sweep the lookback window right away
       // instead of waiting for the next change event / background run.
@@ -427,6 +457,27 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!mounted) return;
     setState(() => _watcherEnabled = enable);
     await widget.settings.update(watcherEnabled: enable);
+  }
+
+  /// Android: partial photo access is fixed in place, with Android 14+'s
+  /// own reselect dialog (Play push). iOS keeps system settings.
+  bool get _fixesPhotoAccessInPlace =>
+      defaultTargetPlatform == TargetPlatform.android;
+
+  /// The Fix for photo access that is not full: on Android the reselect
+  /// dialog (reselectPhotoAccess), or system settings when it cannot help
+  /// (no access before or after it: a permanent denial, below Android 14,
+  /// an error); on iOS system settings. Then the footer line re-reads the
+  /// access.
+  Future<void> _fixPhotoAccess() async {
+    final open = widget.openSystemSettings;
+    if (_fixesPhotoAccessInPlace) {
+      final fix = await reselectPhotoAccess();
+      if (fix == PhotoAccessFix.openSettings) await open?.call();
+      await _probePhotoAccess();
+      return;
+    }
+    await open?.call();
   }
 
   Future<void> _toggleWatchGlasses(bool include) async {
@@ -533,7 +584,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   Future<void> _toggleSummary(bool enable) async {
     setState(() => _summaryEnabled = enable);
     await widget.settings.update(summaryEnabled: enable);
-    if (enable) await _probeNextSummary(); // the store re-armed the card
+    if (!enable) return;
+    // Android 13+: the summary is a notification — the moment to ask.
+    _askNotificationsInContext();
+    await _probeNextSummary(); // the store re-armed the card
   }
 
   @override
@@ -740,20 +794,33 @@ class _SettingsScreenState extends State<SettingsScreen>
         : null;
     // Not full access: the switch is on, but photos taken from now on are
     // outside what the app may read, so they are never logged.
-    final limited =
-        _watcherEnabled && _photosLimited ? l10n.watcherLimitedFooter : null;
+    // Android: the link under the footer fixes it in place, so the line
+    // does not send the user to the Settings app (review, 2026-11-13).
+    final limited = _watcherEnabled && _photosLimited
+        ? (_fixesPhotoAccessInPlace
+            ? l10n.watcherLimitedFooter
+            : l10n.watcherLimitedFooterIos)
+        : null;
     return [?limited, ?paused, ?stuck, footer].join('\n');
   }
 
-  /// Whether the 后台扫描 row (and its iOS footer line) shows. On iOS only
-  /// while Watch Camera Roll is on (U21): with it off the background job
-  /// still records its launches, so a fresh install showed 'Not run yet',
-  /// a time, or a red 'Off' for a scan it does not want — each read as a
-  /// fault. Android keeps the row: its Restricted remedy also covers the
-  /// nightly summary, which runs on the same job.
+  /// Whether the 后台扫描 row (and its iOS footer line) shows: only while
+  /// Watch Camera Roll is on. On iOS (U21) the background job still
+  /// records its launches with it off, so a fresh install showed 'Not run
+  /// yet', a time, or a red 'Off' for a scan it does not want — each read
+  /// as a fault. On Android (review 171, C8) no job runs with it off. The
+  /// battery 'Restricted' remedy for the summary, whose alarm it blocks
+  /// too, is the report section's ([_summaryRestricted]).
   bool get _showBackgroundScanRow =>
-      widget.lastBackgroundScan != null &&
-      (_watcherEnabled || defaultTargetPlatform != TargetPlatform.iOS);
+      widget.lastBackgroundScan != null && _watcherEnabled;
+
+  /// Android: the summary is on and the battery setting is 'Restricted',
+  /// under which Android fires none of the app's alarms — the summary's
+  /// own included (os_summary.dart). iOS cards need no background refresh.
+  bool get _summaryRestricted =>
+      _summaryEnabled &&
+      _backgroundRefreshOff &&
+      defaultTargetPlatform == TargetPlatform.android;
 
   /// Why the automatic scan is latched, with its next try; null when not.
   /// Or that it does not run at all: the own server's address is not
@@ -774,6 +841,25 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   /// Camera-roll watching, coverage audit, backfill window.
   List<Widget> _photoSection(ThemeData theme) => [
+        ..._photoGroup(theme),
+        // Android: under the footer's 'can't see all your photos' line,
+        // the fix itself (the reselect dialog), not a trip to App info.
+        if (_watcherEnabled && _photosLimited && _fixesPhotoAccessInPlace)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                kGroupInset + AppSpace.s4, 0, kGroupInset, 0),
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton(
+                key: const Key('photosAllowAllLink'),
+                onPressed: _fixPhotoAccess,
+                child: Text(context.l10n.watcherAllowAllPhotos),
+              ),
+            ),
+          ),
+      ];
+
+  List<Widget> _photoGroup(ThemeData theme) => [
         GroupedSection(
           header: context.l10n.settingsSectionPhotos,
           footer: _photosFooter(),
@@ -824,10 +910,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                 // Settings' cut the English title to 'Background sc…'
                 // (loop find 2026-10-08, test/ui/row_fit_layout_test.dart).
                 // Android's 电池 › 受限 (App battery usage › Restricted)
-                // parks the periodic job — the scan AND the nightly
-                // summary — for days, and until 2026-10-10 the row showed
-                // 尚未运行 / a frozen time with no hint; the chevron now
-                // lands on App info, where that switch is one tap away.
+                // parks the periodic job for days, and until 2026-10-10
+                // the row showed 尚未运行 / a frozen time with no hint; the
+                // chevron now lands on App info, where that switch is one
+                // tap away.
                 value: _backgroundRefreshOff
                     ? _backgroundOffLabel()
                     : _lastBackgroundProbed
@@ -980,6 +1066,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                 onTap: _pickReportTime,
               ),
               if (_notificationsOff) _notificationsOffRow(theme),
+              if (_summaryRestricted)
+                _summaryWarningRow(
+                  theme,
+                  icon: Icons.battery_alert_outlined,
+                  hint: context.l10n.summaryBatteryRestrictedHint,
+                  hintKey: const Key('summaryRestrictedHint'),
+                  buttonKey: const Key('summaryRestrictedOpenSettings'),
+                ),
               if (widget.nextSummaryAt != null)
                 GroupedRow(
                   key: const Key('nextSummaryRow'),
@@ -1010,7 +1104,39 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   /// Shown only when the OS reports notifications OFF: without this the
   /// daily summary simply never arrives and nothing on the phone says why.
-  Widget _notificationsOffRow(ThemeData theme) {
+  ///
+  /// Android: until the app has asked for the permission the button asks
+  /// (a dialog, once); after, it opens the app's notification settings,
+  /// where a denial is undone — App info on an older native build
+  /// ([fixNotificationsOff]). iOS: system settings, as before.
+  Widget _notificationsOffRow(ThemeData theme) => _summaryWarningRow(
+        theme,
+        icon: Icons.notifications_off_outlined,
+        hint: context.l10n.notificationsOffHint,
+        hintKey: const Key('notificationsOffHint'),
+        buttonKey: const Key('notificationsOffOpenSettings'),
+        buttonLabel: _notificationsAsked
+            ? context.l10n.openSystemSettings
+            : context.l10n.notificationsAllowAction,
+        onPressed: notificationPermissionInContext
+            ? () async {
+                await fixNotificationsOff(fallback: widget.openSystemSettings);
+                await _probeNotifications();
+              }
+            : null,
+      );
+
+  /// Why the daily summary cannot arrive, in red, with the system-settings
+  /// button that fixes it.
+  Widget _summaryWarningRow(
+    ThemeData theme, {
+    required IconData icon,
+    required String hint,
+    required Key hintKey,
+    required Key buttonKey,
+    String? buttonLabel,
+    Future<void> Function()? onPressed,
+  }) {
     final open = widget.openSystemSettings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -1020,13 +1146,12 @@ class _SettingsScreenState extends State<SettingsScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.notifications_off_outlined,
-                  size: 18, color: context.colors.danger),
+              Icon(icon, size: 18, color: context.colors.danger),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  context.l10n.notificationsOffHint,
-                  key: const Key('notificationsOffHint'),
+                  hint,
+                  key: hintKey,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: context.colors.danger),
                 ),
@@ -1036,9 +1161,9 @@ class _SettingsScreenState extends State<SettingsScreen>
           if (open != null) ...[
             const SizedBox(height: 8),
             FilledButton.tonal(
-              key: const Key('notificationsOffOpenSettings'),
-              onPressed: () => open(),
-              child: Text(context.l10n.openSystemSettings),
+              key: buttonKey,
+              onPressed: () => (onPressed ?? open)(),
+              child: Text(buttonLabel ?? context.l10n.openSystemSettings),
             ),
           ],
         ],
