@@ -58,7 +58,8 @@ Future<void> armOsDailySummary({
     if (overdue != null &&
         !overdue.isAfter(at) &&
         at.difference(overdue) <= kSummaryGraceWindow) {
-      final day = summaryDayFor(overdue);
+      final day = summaryDayFor(overdue,
+          slotHour: ReportNotifier.parseHhmm(settings.reportTime).hour);
       final s = await summaryForDay(
         dao: dao,
         day: day,
@@ -78,7 +79,8 @@ Future<void> armOsDailySummary({
   // slot that is tomorrow, whose honest content is the empty-day line
   // until something is logged and this re-runs. A slot before 04:00
   // describes the day that just ended, as 'Yesterday' (C16/C40).
-  final day = summaryDayFor(when);
+  final day = summaryDayFor(when,
+      slotHour: ReportNotifier.parseHhmm(settings.reportTime).hour);
   final s = await summaryForDay(
     dao: dao,
     day: day,

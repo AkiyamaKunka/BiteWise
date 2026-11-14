@@ -72,9 +72,15 @@ const int kSummaryNightEndsHour = 4;
 /// summary is about the day that just ended, not the half hour since
 /// midnight, which always read 'Today: 0 kcal'. Calendar arithmetic
 /// (addCalendarDays), never 24 h, so a DST day is still one day.
-DateTime summaryDayFor(DateTime slot) => slot.hour < kSummaryNightEndsHour
-    ? addCalendarDays(slot, -1)
-    : DateTime(slot.year, slot.month, slot.day);
+///
+/// [slotHour]: the hour the user set. Pass it: on the night DST starts
+/// where clocks jump at 03:00 (Europe/Athens) a 03:30 slot does not exist
+/// and [slot] normalises to 04:30, whose own hour would say 'not a night
+/// slot' (review, 2026-11-13). Without it, [slot]'s hour.
+DateTime summaryDayFor(DateTime slot, {int? slotHour}) =>
+    (slotHour ?? slot.hour) < kSummaryNightEndsHour
+        ? addCalendarDays(slot, -1)
+        : DateTime(slot.year, slot.month, slot.day);
 
 /// Whether a summary about [day], said at [at], is about yesterday (or
 /// earlier) and must be worded so.
@@ -115,7 +121,7 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   }
 
   // The day it describes, which the watermark names.
-  final coveredDay = summaryDayFor(passed);
+  final coveredDay = summaryDayFor(passed, slotHour: slot.$1);
   final covered = isoDate(coveredDay);
   if (deps.postedDate == covered) return false; // already said it once
 

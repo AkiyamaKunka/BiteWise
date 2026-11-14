@@ -356,6 +356,28 @@ void main() {
       expect(summaryDayFor(DateTime(2027, 1, 1, 0, 30)), DateTime(2026, 12, 31));
     });
 
+    // Review: on the day DST starts where clocks jump at 03:00 (Europe/
+    // Athens, 2026-03-29, 03:00 → 04:00) a 03:30 slot does not exist and
+    // normalises to 04:30; the hour of the normalised time read as 'not a
+    // night slot' and the card said 'Today: 0 kcal'. The CONFIGURED hour
+    // decides. Meaningful under TZ=Europe/Athens; true everywhere.
+    test('the configured hour decides, not the normalised one', () {
+      final normalised = DateTime(2026, 3, 29, 3, 30); // 04:30 in Athens
+      expect(iso(summaryDayFor(normalised, slotHour: 3)), '2026-03-28');
+      expect(iso(summaryDayFor(DateTime(2026, 3, 29, 4, 30), slotHour: 4)),
+          '2026-03-29');
+    });
+
+    test('a 03:30 slot on the DST-start night posts the day that ended',
+        () async {
+      dao.put(meal('2026-03-28', 1800));
+      final now = DateTime(2026, 3, 29, 4, 45);
+      expect(await maybePostDailySummary(deps(now: now, reportTime: '03:30')),
+          isTrue);
+      expect(posted.single.$1, 'Yesterday: 1,800 kcal');
+      expect(marks, ['2026-03-28']);
+    });
+
     test('the day after a DST change is still one calendar day back', () {
       // US: Mar 8 (23 h) and Nov 1 (25 h); New Zealand: Apr 5 and Sep 27.
       for (final (slot, day) in [
