@@ -666,6 +666,19 @@ void main() {
     });
     tearDown(() => cache.deleteSync(recursive: true));
 
+    // The sweep lists and stats real files, and real I/O completes outside
+    // the microtask queue: a fixed number of pumps is not enough on a slow
+    // runner (CI, 2026-11-14). Wait, in real time, for what the test
+    // expects to happen; negative checks wait for a sentinel copy instead.
+    Future<void> until(bool Function() done, String what) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 20));
+      while (!done()) {
+        if (DateTime.now().isAfter(deadline)) fail('timed out waiting: $what');
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      await pumpEventQueue(times: 50);
+    }
+
     File copyAt(String id, String name, Duration age) =>
         File('$folder/$id/$name')
           ..createSync(recursive: true)
@@ -699,7 +712,7 @@ void main() {
       final sub = android(source, read)
           .photos()
           .listen((p) => emitted.add(p.fileName));
-      await pumpEventQueue(times: 50);
+      await until(() => emitted.length >= 3, 'three copies emitted');
       expect(emitted, ['IMG_c.jpg', 'IMG_a.jpg', 'IMG_b.jpg']);
       expect(emitted.length, 3, reason: 'the launch share once, not twice');
       for (final f in [a, b, launch]) {
@@ -713,7 +726,7 @@ void main() {
       final read = <String>[];
       final emitted = <IntakePhoto>[];
       final sub = android(FakeShareSource(), read).photos().listen(emitted.add);
-      await pumpEventQueue(times: 50);
+      await until(() => !old.existsSync(), 'the old copy deleted');
       expect(emitted, isEmpty);
       expect(read, isEmpty, reason: 'never read, never sent');
       expect(old.existsSync(), isFalse);
@@ -722,10 +735,11 @@ void main() {
 
     test('a copy written seconds ago is left to its own share', () async {
       final fresh = copyAt('u1', 'IMG_new.jpg', const Duration(seconds: 2));
+      final sentinel = copyAt('u2', 'IMG_s.jpg', const Duration(hours: 1));
       final read = <String>[];
       final sub = android(FakeShareSource(), read).photos().listen((_) {});
-      await pumpEventQueue(times: 50);
-      expect(read, isEmpty,
+      await until(() => read.isNotEmpty, 'the sweep reached the sentinel');
+      expect(read, [sentinel.path],
           reason: 'it may still be being copied; its event delivers it');
       expect(fresh.existsSync(), isTrue);
       await sub.cancel();
@@ -734,6 +748,7 @@ void main() {
     test('a copy both left over and in a live share is logged once',
         () async {
       final c = copyAt('u1', 'IMG_x.jpg', const Duration(minutes: 5));
+      copyAt('u2', 'IMG_s.jpg', const Duration(hours: 1));
       final source = FakeShareSource();
       final read = <String>[];
       final emitted = <String>[];
@@ -741,8 +756,10 @@ void main() {
           .photos()
           .listen((p) => emitted.add(p.fileName));
       source.controller.add([c.path]);
-      await pumpEventQueue(times: 50);
-      expect(emitted, ['IMG_x.jpg']);
+      await until(() => emitted.length >= 2, 'the live copy and the sentinel');
+      expect(emitted.where((n) => n == 'IMG_x.jpg'), hasLength(1),
+          reason: 'logged once, not once per route');
+      expect(emitted.toSet(), {'IMG_x.jpg', 'IMG_s.jpg'});
       await sub.cancel();
     });
 
@@ -750,10 +767,11 @@ void main() {
       final private = File('${cache.path}/private.jpg')
         ..writeAsBytesSync([1])
         ..setLastModifiedSync(now.subtract(const Duration(days: 3)));
+      final sentinel = copyAt('u2', 'IMG_s.jpg', const Duration(hours: 1));
       final read = <String>[];
       final sub = android(FakeShareSource(), read).photos().listen((_) {});
-      await pumpEventQueue(times: 50);
-      expect(read, isEmpty);
+      await until(() => read.isNotEmpty, 'the sweep reached the sentinel');
+      expect(read, [sentinel.path]);
       expect(private.existsSync(), isTrue);
       await sub.cancel();
     });
