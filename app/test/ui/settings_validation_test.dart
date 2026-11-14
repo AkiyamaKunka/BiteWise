@@ -10,9 +10,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/services/photo/background_restriction.dart'
+    show backgroundRestrictionChannel;
+import 'package:calorie_tracker/services/report/notification_permission.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 import 'package:calorie_tracker/ui/widgets/grouped.dart' show RowBadge;
 
@@ -1415,11 +1419,171 @@ void planTuningTests() {
           enabled: () async => false, open: () async => opened++));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('notificationsOffHint')), findsOneWidget);
+      expect(find.text('Open system settings'), findsOneWidget);
       await tester.ensureVisible(
           find.byKey(const Key('notificationsOffOpenSettings')));
       await tester.tap(find.byKey(const Key('notificationsOffOpenSettings')));
       await tester.pump();
       expect(opened, 1);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    // The Play push (2026-11-13): Android 13+ asks once, in context
+    // (notification_permission.dart). Until then the row's button asks;
+    // after, it opens the app's notification settings page, or App info on
+    // a native build without that method.
+    group('Android', () {
+      late int requests;
+      late List<String> nativeCalls;
+      setUp(() {
+        SharedPreferences.setMockInitialValues({});
+        requests = 0;
+        nativeCalls = [];
+        debugRequestNotificationPermission = () async {
+          requests++;
+          return false;
+        };
+      });
+      tearDown(() {
+        debugRequestNotificationPermission = null;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(backgroundRestrictionChannel, null);
+      });
+
+      Future<void> tapRemedy(WidgetTester tester) async {
+        await tester.ensureVisible(
+            find.byKey(const Key('notificationsOffOpenSettings')));
+        await tester.tap(find.byKey(const Key('notificationsOffOpenSettings')));
+        await tester.pumpAndSettle();
+      }
+
+      testWidgets('never asked → "Allow notifications" shows the dialog; '
+          'then the button opens the notification settings', (tester) async {
+        _tallView(tester);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(backgroundRestrictionChannel,
+                (call) async {
+          nativeCalls.add(call.method);
+          return true;
+        });
+        var opened = 0;
+        await tester.pumpWidget(screen(
+            enabled: () async => false, open: () async => opened++));
+        await tester.pumpAndSettle();
+        expect(find.text('Allow notifications'), findsOneWidget);
+        await tapRemedy(tester);
+        expect(requests, 1);
+        expect(nativeCalls, isEmpty);
+        // Denied: the button now leads to the settings page.
+        expect(find.text('Open system settings'), findsOneWidget);
+        await tapRemedy(tester);
+        expect(requests, 1, reason: 'never a second dialog');
+        expect(nativeCalls, ['openNotificationSettings']);
+        expect(opened, 0, reason: 'the notification page, not App info');
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+      testWidgets('an older native build falls back to App info',
+          (tester) async {
+        _tallView(tester);
+        SharedPreferences.setMockInitialValues(
+            {notificationPermissionAskedPrefsKey: true});
+        // A native build without openNotificationSettings.
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(backgroundRestrictionChannel,
+                (call) async {
+          nativeCalls.add(call.method);
+          throw MissingPluginException();
+        });
+        var opened = 0;
+        await tester.pumpWidget(screen(
+            enabled: () async => false, open: () async => opened++));
+        await tester.pumpAndSettle();
+        expect(find.text('Open system settings'), findsOneWidget);
+        await tapRemedy(tester);
+        expect(nativeCalls, ['openNotificationSettings']);
+        expect(opened, 1);
+        expect(requests, 0);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+      testWidgets('switching the summary on asks, once', (tester) async {
+        _tallView(tester);
+        final settings = FakeSettings(apiKey: 'k', summaryEnabled: false);
+        await tester.pumpWidget(_wrap(SettingsScreen(
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+        )));
+        await tester.pumpAndSettle();
+        expect(requests, 0, reason: 'opening Settings asks nothing');
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(find.byKey(const Key('summaryToggle')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('summaryToggle')));
+          await tester.pumpAndSettle();
+        }
+        expect(settings.summaryEnabled, isFalse);
+        expect(requests, 1);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+      testWidgets('switching Watch Camera Roll on asks after its photo '
+          'prompt', (tester) async {
+        _tallView(tester);
+        final order = <String>[];
+        debugRequestNotificationPermission = () async {
+          order.add('notifications');
+          return true;
+        };
+        final settings = FakeSettings(
+            apiKey: 'k', watcherDisclosureSeen: true, summaryEnabled: false);
+        await tester.pumpWidget(_wrap(SettingsScreen(
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async {
+            order.add('photos');
+            return true;
+          },
+        )));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('watcherToggle')));
+        await tester.pumpAndSettle();
+        expect(settings.watcherEnabled, isTrue);
+        expect(order, ['photos', 'notifications']);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+      testWidgets('photos refused → the watcher stays off and nothing more '
+          'is asked', (tester) async {
+        _tallView(tester);
+        final settings = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true);
+        await tester.pumpWidget(_wrap(SettingsScreen(
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => false,
+        )));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('watcherToggle')));
+        await tester.pumpAndSettle();
+        expect(settings.watcherEnabled, isFalse);
+        expect(requests, 0);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+      testWidgets('iOS: the switches never ask (iOS asks at init)',
+          (tester) async {
+        _tallView(tester);
+        final settings = FakeSettings(apiKey: 'k', summaryEnabled: false);
+        await tester.pumpWidget(_wrap(SettingsScreen(
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+        )));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('summaryToggle')));
+        await tester.pumpAndSettle();
+        expect(settings.summaryEnabled, isTrue);
+        expect(requests, 0);
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
     });
 
     testWidgets('on, or unknown → no row', (tester) async {

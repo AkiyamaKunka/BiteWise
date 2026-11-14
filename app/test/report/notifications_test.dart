@@ -84,10 +84,11 @@ class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
       android is T ? android as T : null;
 }
 
-/// The Android side: records the channels created, grants the permission.
+/// The Android side: records the channels created and permission asks.
 class _FakeAndroid extends Fake
     implements AndroidFlutterLocalNotificationsPlugin {
   final channels = <AndroidNotificationChannel>[];
+  int permissionRequests = 0;
 
   @override
   Future<void> createNotificationChannel(
@@ -95,7 +96,10 @@ class _FakeAndroid extends Fake
       channels.add(notificationChannel);
 
   @override
-  Future<bool?> requestNotificationsPermission() async => true;
+  Future<bool?> requestNotificationsPermission() async {
+    permissionRequests++;
+    return true;
+  }
 }
 
 void main() {
@@ -398,6 +402,18 @@ void main() {
     await notifier.showDailySummary('Today', '1800 kcal');
     expect(android.channels.last.name, 'Reports & meals',
         reason: 'an existing channel is renamed on the next post');
+  });
+
+  // The Play push (2026-11-13): init runs at every start, in the app and
+  // in each background run; asking there put the dialog over setup, again
+  // at the second launch, and two denials are permanent. It is asked in
+  // context now (notification_permission.dart).
+  test('init never asks for Android\'s notification permission', () async {
+    final android = _FakeAndroid();
+    final notifier = ReportNotifier(plugin: _RecordingPlugin(android: android));
+    await notifier.init();
+    expect(android.channels, isNotEmpty, reason: 'it did initialize');
+    expect(android.permissionRequests, 0);
   });
 
   test('without channel strings the channel keeps its English name',

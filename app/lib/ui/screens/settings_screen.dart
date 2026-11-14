@@ -20,6 +20,7 @@ import '../../services/backup/backup_coordinator.dart';
 import '../../services/analyzer/platform_decode.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
+import '../../services/report/notification_permission.dart';
 import '../ai_consent.dart';
 import '../photo_pipeline.dart';
 import '../outcome_text.dart' show autoScanPausedLine, dayTimeLabel;
@@ -174,6 +175,12 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// settings). Unknown/null keeps the row hidden.
   bool _notificationsOff = false;
 
+  /// Android: whether the app has asked for the notification permission
+  /// (notification_permission.dart). Until it has, the notifications-off
+  /// row's button asks (Allow notifications); after, it opens the app's
+  /// notification settings. Always true off Android.
+  bool _notificationsAsked = true;
+
   /// The armed daily-summary slot; null once probed = nothing armed.
   DateTime? _nextSummary;
   bool _nextSummaryProbed = false;
@@ -295,7 +302,21 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!mounted) return;
     final off = enabled == false;
     if (off != _notificationsOff) setState(() => _notificationsOff = off);
+    // Only the button's label waits on this; what it does reads the flag
+    // itself (fixNotificationsOff).
+    if (!off || !notificationPermissionInContext) return;
+    final asked = await notificationPermissionAsked();
+    if (mounted && asked != _notificationsAsked) {
+      setState(() => _notificationsAsked = asked);
+    }
   }
+
+  /// Android 13+: one of the moments to ask for the notification
+  /// permission, once (notification_permission.dart). Not awaited: the
+  /// system dialog is modal on its own, and the flow that asked goes on
+  /// beneath it; the remedy row re-reads the answer.
+  void _askNotificationsInContext() => unawaited(askNotificationPermissionOnce()
+      .then((_) => _probeNotifications(), onError: (Object _) {}));
 
   void _onSettingsChanged() {
     if (mounted) setState(() {});
@@ -382,6 +403,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         return; // leave the switch off
       }
       if (!mounted) return;
+      // Android 13+: the watcher's meal cards are notifications — the
+      // moment to ask, once, after the photo prompt.
+      _askNotificationsInContext();
       // The watcher arms fine without a usable key — it just never logs
       // anything. Flipping a switch that silently does nothing needs a
       // sentence, not silence.
@@ -537,7 +561,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   Future<void> _toggleSummary(bool enable) async {
     setState(() => _summaryEnabled = enable);
     await widget.settings.update(summaryEnabled: enable);
-    if (enable) await _probeNextSummary(); // the store re-armed the card
+    if (!enable) return;
+    // Android 13+: the summary is a notification — the moment to ask.
+    _askNotificationsInContext();
+    await _probeNextSummary(); // the store re-armed the card
   }
 
   @override
@@ -1025,12 +1052,26 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   /// Shown only when the OS reports notifications OFF: without this the
   /// daily summary simply never arrives and nothing on the phone says why.
+  ///
+  /// Android: until the app has asked for the permission the button asks
+  /// (a dialog, once); after, it opens the app's notification settings,
+  /// where a denial is undone — App info on an older native build
+  /// ([fixNotificationsOff]). iOS: system settings, as before.
   Widget _notificationsOffRow(ThemeData theme) => _summaryWarningRow(
         theme,
         icon: Icons.notifications_off_outlined,
         hint: context.l10n.notificationsOffHint,
         hintKey: const Key('notificationsOffHint'),
         buttonKey: const Key('notificationsOffOpenSettings'),
+        buttonLabel: _notificationsAsked
+            ? context.l10n.openSystemSettings
+            : context.l10n.notificationsAllowAction,
+        onPressed: notificationPermissionInContext
+            ? () async {
+                await fixNotificationsOff(fallback: widget.openSystemSettings);
+                await _probeNotifications();
+              }
+            : null,
       );
 
   /// Why the daily summary cannot arrive, in red, with the system-settings
@@ -1041,6 +1082,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     required String hint,
     required Key hintKey,
     required Key buttonKey,
+    String? buttonLabel,
+    Future<void> Function()? onPressed,
   }) {
     final open = widget.openSystemSettings;
     return Padding(
@@ -1067,8 +1110,8 @@ class _SettingsScreenState extends State<SettingsScreen>
             const SizedBox(height: 8),
             FilledButton.tonal(
               key: buttonKey,
-              onPressed: () => open(),
-              child: Text(context.l10n.openSystemSettings),
+              onPressed: () => (onPressed ?? open)(),
+              child: Text(buttonLabel ?? context.l10n.openSystemSettings),
             ),
           ],
         ],

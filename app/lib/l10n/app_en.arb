@@ -3442,5 +3442,9 @@
   "summaryBatteryRestrictedHint": "Battery use is Restricted — the daily summary can't be delivered.",
   "@summaryBatteryRestrictedHint": {
     "description": "Settings › Daily summary, Android only: red hint shown while the summary is on and the app's battery usage is set to Restricted (App info › App battery usage), under which Android fires none of the app's alarms, the summary's included. Followed by the 'Open system settings' button. Worded like notificationsOffHint."
+  },
+  "notificationsAllowAction": "Allow notifications",
+  "@notificationsAllowAction": {
+    "description": "Settings › Daily summary, Android 13+: the button under notificationsOffHint while the app has never asked for the notification permission. Tapping it shows Android's own permission dialog (asked once); after that the button reads openSystemSettings and opens the app's notification settings."
   }
 }

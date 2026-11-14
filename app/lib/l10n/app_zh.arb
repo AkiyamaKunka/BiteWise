@@ -1008,5 +1008,6 @@
   "leftoverSaveFailed": "没能完成剩菜扣除，请再试一次。",
   "covWindowLabel": "检查天数",
   "bodyDeleteFailed": "没能删除，请再试一次。",
-  "summaryBatteryRestrictedHint": "电池使用受限 —— 每日总结无法送达。"
+  "summaryBatteryRestrictedHint": "电池使用受限 —— 每日总结无法送达。",
+  "notificationsAllowAction": "允许通知"
 }

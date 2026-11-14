@@ -160,8 +160,8 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
 /// (leftoverLoadFailed, leftoverSaveFailed), then the Android background
-/// lane's block (summaryBatteryRestrictedHint, …).
-const _keyCount = 891;
+/// lane's block (summaryBatteryRestrictedHint, notificationsAllowAction, …).
+const _keyCount = 892;
 
 Directory _appRoot() {
   var dir = Directory.current;

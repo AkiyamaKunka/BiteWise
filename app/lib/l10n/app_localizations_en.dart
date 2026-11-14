@@ -3623,4 +3623,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get summaryBatteryRestrictedHint =>
       'Battery use is Restricted — the daily summary can\'t be delivered.';
+
+  @override
+  String get notificationsAllowAction => 'Allow notifications';
 }

@@ -182,6 +182,12 @@ class ReportNotifier {
 
   Future<void>? _initInFlight;
 
+  /// The plugin and the Android channel; on iOS also the permission ask
+  /// (DarwinInitializationSettings). Android's permission is NOT asked
+  /// here: init ran at every start, so a fresh install got the dialog over
+  /// setup and again at the second launch, and two denials are permanent.
+  /// It is asked once, in context (notification_permission.dart).
+  ///
   /// Single-flight: on iOS the first call blocks on the permission dialog,
   /// and every lifecycle transition the dialog itself causes re-arms the
   /// summary through here — one initialize, everyone awaits it.
@@ -200,16 +206,6 @@ class ReportNotifier {
     );
     await _plugin.initialize(settings: settings);
     await _syncChannel();
-    try {
-      // Android 13+ runtime grant; a denial means silent no-shows, so a
-      // failure here is non-fatal.
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-    } catch (_) {
-      // Older plugin/platform combinations: proceed without the grant.
-    }
     _initialized = true;
   }
 

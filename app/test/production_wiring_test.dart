@@ -768,6 +768,33 @@ void main() {
       );
     });
 
+    // Android 13+ asks for the notification permission once, in context:
+    // the first meal saved with the app in front is one of the moments
+    // (notification_permission.dart). Never in a background run.
+    test('di.dart asks after a meal saved, while the summary or the '
+        'watcher would notify', () {
+      final init = _body(
+        _source('lib/ui/di.dart'),
+        'static Future<AppServices> init(',
+        indent: '  ',
+      );
+      expect(
+        init,
+        _wired(
+          r'onMealSaved: \(\) \{ signalMealsChanged\(\); '
+          r'if \(appEngineInForeground\(\) && '
+          r'\(settings\.summaryEnabled \|\| settings\.watcherEnabled\)\) \{ '
+          r'unawaited\(askNotificationPermissionOnce\(\)\);',
+        ),
+      );
+      final glue = _source('lib/ui/background_glue.dart');
+      expect(glue, isNot(contains('askNotificationPermissionOnce')));
+      expect(glue, isNot(contains('requestNotificationsPermission')));
+      expect(_source('lib/services/report/notifications.dart'),
+          isNot(contains('requestNotificationsPermission')),
+          reason: 'init runs at every start, in every engine');
+    });
+
     test('the background run re-arms it on both platforms and posts '
         'nothing itself', () {
       final glue = _source('lib/ui/background_glue.dart');

@@ -45,6 +45,7 @@ import '../services/photo/photo_location.dart';
 import '../services/photo/share_intake.dart';
 import '../services/places/places.dart' show MapKitPlaces;
 import '../services/photo/watcher.dart';
+import '../services/report/notification_permission.dart';
 import '../services/report/notifications.dart';
 import '../services/report/daily_summary.dart';
 import '../services/usual/usual_foods.dart';
@@ -244,8 +245,17 @@ class AppServices {
         dao: dao,
         analyzer: analyzer,
         notify: announce,
-        // Open screens re-query instead of showing pre-save data.
-        onMealSaved: signalMealsChanged,
+        // Open screens re-query instead of showing pre-save data. Android
+        // 13+: the first meal saved with the app in front is the moment to
+        // ask for the notification permission, once — while the summary or
+        // the watcher's cards would use it (notification_permission.dart).
+        onMealSaved: () {
+          signalMealsChanged();
+          if (appEngineInForeground() &&
+              (settings.summaryEnabled || settings.watcherEnabled)) {
+            unawaited(askNotificationPermissionOnce());
+          }
+        },
         // A rejected key / blocked region parks the automatic scan.
         latch: autoScanLatchFor(settings),
         // B14's previous-night candidates, under the consent that says so.

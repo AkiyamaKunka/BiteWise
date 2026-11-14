@@ -3256,4 +3256,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get summaryBatteryRestrictedHint => '电池使用受限 —— 每日总结无法送达。';
+
+  @override
+  String get notificationsAllowAction => '允许通知';
 }

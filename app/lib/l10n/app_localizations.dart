@@ -5464,6 +5464,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Battery use is Restricted — the daily summary can\'t be delivered.'**
   String get summaryBatteryRestrictedHint;
+
+  /// Settings › Daily summary, Android 13+: the button under notificationsOffHint while the app has never asked for the notification permission. Tapping it shows Android's own permission dialog (asked once); after that the button reads openSystemSettings and opens the app's notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow notifications'**
+  String get notificationsAllowAction;
 }
 
 class _AppLocalizationsDelegate
