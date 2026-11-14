@@ -29,15 +29,22 @@ class MainActivity : FlutterActivity() {
     /// picked files are copied. Main thread only.
     private var pickReply: MethodChannel.Result? = null
 
-    /// The open pickImages call, and the most photos it asked the picker
-    /// for (which contract parses the result). Main thread only.
-    private var photoPickReply: MethodChannel.Result? = null
+    /// The open pickImages call (answered once, busy while open), its
+    /// number, and the most photos it asked the picker for (which contract
+    /// parses the result). Main thread only.
+    private val photoPicks = SingleCall<Map<String, Any>>()
+    private var photoPickCall = 0L
     private var photoPickMax = 1
 
-    /// The open saveFile call and the cached file it saves. Main thread
-    /// only.
-    private var saveReply: MethodChannel.Result? = null
-    private var saveSource: File? = null
+    /// The open saveFile call and its number. Main thread only.
+    private val saves = SingleCall<Map<String, Any>>()
+    private var saveCall = 0L
+
+    /// The cached file a create-document screen was opened for: the open
+    /// saveFile call's, or one restored from saved state when Android
+    /// recreated the activity while that screen was up (the call died with
+    /// its engine, but the user still picked a place for the file).
+    private var pendingSaveSource: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // receive_sharing_intent reads the launch intent while
@@ -49,14 +56,19 @@ class MainActivity : FlutterActivity() {
         // copied; that also keeps a bitewise://setup link from reopening
         // its dialog. New shares arrive through onNewIntent, as before. A
         // several-photo share cut short by the stop is not resumed.
-        val replay = savedInstanceState != null ||
-            ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        val replay = IntakeRules.isRedelivery(savedInstanceState != null, intent?.flags ?: 0)
         if (replay) {
             intent?.let { setIntent(emptyShare(it)) }
         } else {
             intent?.let { setIntent(withSafeShares(it)) }
         }
         super.onCreate(savedInstanceState)
+        pendingSaveSource = cachedFile(savedInstanceState?.getString(STATE_SAVE_SOURCE))
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingSaveSource?.let { outState.putString(STATE_SAVE_SOURCE, it.path) }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -103,7 +115,7 @@ class MainActivity : FlutterActivity() {
         streams.forEachIndexed { i, uri ->
             try {
                 if (uri == null) return@forEachIndexed
-                if (isOwnShareOut(uri)) return@forEachIndexed
+                if (IntakeRules.isOwnShareOut(uri.scheme, uri.authority, packageName)) return@forEachIndexed
                 val name = shareName(uri) ?: return@forEachIndexed
                 // The type the plugin gives it: the share's own, or for
                 // several, each one's listed type, else its name's.
@@ -138,13 +150,6 @@ class MainActivity : FlutterActivity() {
             Intent()
         }
     }
-
-    /// Whether [uri] is one of the app's own share-out files (Today's day
-    /// image, an Export), served by share_plus's FileProvider: Chopstats
-    /// is a target in its own sharesheet, and such a file is no meal.
-    private fun isOwnShareOut(uri: Uri): Boolean =
-        "content".equals(uri.scheme, ignoreCase = true) &&
-            "$packageName$SHARE_OUT_AUTHORITY_SUFFIX".equals(uri.authority, ignoreCase = true)
 
     /// [intent] with nothing a plugin reads as a share or a link.
     private fun emptyShare(intent: Intent): Intent = try {
@@ -213,7 +218,7 @@ class MainActivity : FlutterActivity() {
     /// null when it cannot be read or written, is over MAX_SHARE_BYTES, or
     /// is one of the app's own files.
     private fun copyShare(uri: Uri, name: String): File? {
-        if ("file".equals(uri.scheme, ignoreCase = true) && isAppFile(uri)) return null
+        if (isOwnFile(uri)) return null
         val dir = File(File(cacheDir, SHARE_FOLDER), UUID.randomUUID().toString())
         if (!dir.mkdirs()) return null
         val out = File(dir, name)
@@ -223,18 +228,12 @@ class MainActivity : FlutterActivity() {
         return null
     }
 
-    /// Whether the file [uri] names lies in the app's own data directory
-    /// (or cannot be told apart from one).
-    private fun isAppFile(uri: Uri): Boolean {
-        val path = uri.path ?: return true
-        return try {
-            val target = File(path).canonicalPath
-            val own = File(applicationInfo.dataDir).canonicalPath
-            target == own || target.startsWith("$own/")
-        } catch (e: Exception) {
-            true
-        }
-    }
+    /// Whether [uri] is a file:// URI into the app's own data directory
+    /// (or one that cannot be told apart from it): never copied, whether
+    /// shared or picked.
+    private fun isOwnFile(uri: Uri): Boolean =
+        "file".equals(uri.scheme, ignoreCase = true) &&
+            IntakeRules.liesIn(File(applicationInfo.dataDir), uri.path)
 
     /// Folders whose copy Dart has read and deleted.
     private fun clearEmptyShareFolders() {
@@ -308,15 +307,7 @@ class MainActivity : FlutterActivity() {
         pages.add(
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
         )
-        for (page in pages) {
-            try {
-                startActivity(page)
-                return true
-            } catch (e: Exception) {
-                // Not on this device: the next page.
-            }
-        }
-        return false
+        return IntakeRules.openFirst(pages) { startActivity(it) }
     }
 
     private fun pickFiles(result: MethodChannel.Result) {
@@ -348,15 +339,15 @@ class MainActivity : FlutterActivity() {
     /// registerForActivityResult. Where the picker is missing the contract
     /// itself falls back (Play services' backported picker, see the
     /// ModuleDependencies entry in AndroidManifest.xml, else
-    /// ACTION_OPEN_DOCUMENT). [requested] is clamped to 1 and to the
-    /// picker's own limit. Answers {status, items, tooBig, failed} once the
-    /// picks are copied (onPhotosPicked); busy while a pick is open.
+    /// ACTION_OPEN_DOCUMENT). [requested] is clamped (IntakeRules.pickMax).
+    /// Answers {status, items, tooBig, failed} once the picks are copied
+    /// (onPhotosPicked); busy while a pick is open.
     private fun pickImages(requested: Int, result: MethodChannel.Result) {
-        if (photoPickReply != null) {
+        if (photoPicks.isOpen) {
             result.success(photoPickAnswer("busy"))
             return
         }
-        val max = requested.coerceIn(1, pickLimit())
+        val max = IntakeRules.pickMax(requested, systemPickLimit())
         val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
         val intent = try {
             if (max == 1) ActivityResultContracts.PickVisualMedia().createIntent(this, request)
@@ -365,24 +356,24 @@ class MainActivity : FlutterActivity() {
             result.success(photoPickAnswer("unavailable"))
             return
         }
-        photoPickReply = result
+        val call = photoPicks.open { result.success(it) } ?: return result.success(photoPickAnswer("busy"))
+        photoPickCall = call
         photoPickMax = max
         try {
             startActivityForResult(intent, PHOTO_PICK_REQUEST)
         } catch (e: Exception) {
-            photoPickReply = null
-            result.success(photoPickAnswer("unavailable"))
+            photoPicks.answer(call, photoPickAnswer("unavailable"))
         }
     }
 
     /// The system picker's most photos per pick (its contract refuses
-    /// more): where AndroidX uses it, API 33+ or R extension 2+. Its
-    /// fallbacks take any number.
+    /// more), where AndroidX uses it: API 33+ or R extension 2+. Null where
+    /// only a fallback picker exists.
     @SuppressLint("NewApi")
-    private fun pickLimit(): Int =
+    private fun systemPickLimit(): Int? =
         if (Build.VERSION.SDK_INT >= 33 ||
             (Build.VERSION.SDK_INT >= 30 && SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R) >= 2)
-        ) MediaStore.getPickImagesMaxLimit().coerceAtLeast(1) else Int.MAX_VALUE
+        ) MediaStore.getPickImagesMaxLimit() else null
 
     private fun photoPickAnswer(
         status: String,
@@ -392,27 +383,32 @@ class MainActivity : FlutterActivity() {
     ): Map<String, Any> =
         mapOf("status" to status, "items" to items, "tooBig" to tooBig, "failed" to failed)
 
-    /// Copies each picked photo to cacheDir/PICKED_PHOTO_FOLDER/<uuid>/<name>
-    /// (the folder emptied first: Dart has read and deleted the last
-    /// pick's copies by now), under the share cap, with its capture time
-    /// when the provider gives one. Off the UI thread; the call stays open
-    /// (busy) until the answer, so a second pick cannot empty the folder
-    /// while this one writes it. The grants last only while the app runs,
-    /// hence the copies.
+    /// Copies each picked photo (at most the call's maximum: the
+    /// ACTION_OPEN_DOCUMENT fallback ignores it) to
+    /// cacheDir/PICKED_PHOTO_FOLDER/<uuid>/<name>, under the share cap,
+    /// with its capture time when the provider gives one. First it tidies
+    /// what earlier picks left (IntakeRules.tidyPickFolders: empty or
+    /// day-old folders only). Off the UI thread; the call stays open
+    /// (busy) until the answer. The grants last only while the app runs,
+    /// hence the copies. With no open call (Android recreated the activity
+    /// while the picker was up, and the call died with its engine) nothing
+    /// is copied: no one would read it.
     private fun onPhotosPicked(resultCode: Int, data: Intent?) {
-        val reply = photoPickReply ?: return
-        val uris: List<Uri> = try {
-            if (photoPickMax == 1) {
+        if (!photoPicks.isOpen) return
+        val call = photoPickCall
+        val max = photoPickMax
+        val picked: List<Uri> = try {
+            if (max == 1) {
                 listOfNotNull(ActivityResultContracts.PickVisualMedia().parseResult(resultCode, data))
             } else {
-                ActivityResultContracts.PickMultipleVisualMedia(photoPickMax).parseResult(resultCode, data)
+                ActivityResultContracts.PickMultipleVisualMedia(max).parseResult(resultCode, data)
             }
         } catch (e: Exception) {
             emptyList()
         }
+        val uris = IntakeRules.firstPicks(picked, max)
         if (resultCode != Activity.RESULT_OK || uris.isEmpty()) {
-            photoPickReply = null
-            reply.success(photoPickAnswer("cancelled"))
+            photoPicks.answer(call, photoPickAnswer("cancelled"))
             return
         }
         Thread {
@@ -420,13 +416,13 @@ class MainActivity : FlutterActivity() {
             var tooBig = 0
             var failed = 0
             val root = File(cacheDir, PICKED_PHOTO_FOLDER)
-            try {
-                root.deleteRecursively()
-                root.mkdirs()
-            } catch (e: Exception) {
-            }
+            IntakeRules.tidyPickFolders(root, System.currentTimeMillis())
             uris.forEach { uri ->
                 try {
+                    if (isOwnFile(uri)) {
+                        failed++
+                        return@forEach
+                    }
                     val name = shareName(uri)
                         ?: if ("content".equals(uri.scheme, ignoreCase = true)) fallbackShareName(uri) else null
                     val dir = File(root, UUID.randomUUID().toString())
@@ -456,10 +452,7 @@ class MainActivity : FlutterActivity() {
                     failed++
                 }
             }
-            runOnUiThread {
-                if (photoPickReply === reply) photoPickReply = null
-                reply.success(photoPickAnswer("ok", items, tooBig, failed))
-            }
+            runOnUiThread { photoPicks.answer(call, photoPickAnswer("ok", items, tooBig, failed)) }
         }.start()
     }
 
@@ -478,11 +471,12 @@ class MainActivity : FlutterActivity() {
     /// Export › Save to device: asks the user where to save [name] (the
     /// system's create-document screen, suggested name and type [mime]),
     /// then copies the file at [path] there (onSaveTargetPicked). Only a
-    /// file whose real path lies in the app's cache, where the export is
-    /// written, is ever copied: never the database or anything else the
-    /// app keeps. Answers {status: ok|cancelled|busy|unavailable|failed}.
+    /// regular file whose real path lies in the app's cache, where the
+    /// export is written, is ever copied (cachedFile): never the database
+    /// or anything else the app keeps. Answers {status:
+    /// ok|cancelled|busy|unavailable|failed}.
     private fun saveFile(path: String?, name: String?, mime: String?, result: MethodChannel.Result) {
-        if (saveReply != null) {
+        if (saves.isOpen) {
             result.success(saveAnswer("busy"))
             return
         }
@@ -496,71 +490,67 @@ class MainActivity : FlutterActivity() {
             type = mime?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
             putExtra(Intent.EXTRA_TITLE, baseName(name) ?: source.name)
         }
-        saveReply = result
-        saveSource = source
+        val call = saves.open { result.success(it) } ?: return result.success(saveAnswer("busy"))
+        saveCall = call
+        pendingSaveSource = source
         try {
             startActivityForResult(intent, SAVE_REQUEST)
         } catch (e: Exception) {
-            saveReply = null
-            saveSource = null
-            result.success(saveAnswer("unavailable"))
+            pendingSaveSource = null
+            saves.answer(call, saveAnswer("unavailable"))
         }
     }
 
     private fun saveAnswer(status: String): Map<String, Any> = mapOf("status" to status)
 
-    /// The regular file at [path] when its real path (symbolic links
-    /// resolved) lies inside the app's cache directory; null otherwise.
-    private fun cachedFile(path: String?): File? {
-        if (path.isNullOrEmpty()) return null
-        return try {
-            val cache = cacheDir.canonicalFile
-            val file = File(path).canonicalFile
-            if (file.path.startsWith(cache.path + File.separator) && file.isFile) file else null
-        } catch (e: Exception) {
-            null
-        }
-    }
+    /// The regular file at [path] in the app's cache; null for anything
+    /// else (IntakeRules.regularFileIn).
+    private fun cachedFile(path: String?): File? = IntakeRules.regularFileIn(cacheDir, path)
 
-    /// Copies the file saveFile checked into the document the user just
-    /// created, off the UI thread (checked again first). A failed copy
-    /// removes that document rather than leave an empty or partial file.
+    /// The user picked where to save, or backed out (IntakeRules.saveStep).
+    /// COPY: the checked source (checked again) goes into the new document
+    /// off the UI thread, opened only in a truncating mode
+    /// (IntakeRules.SAVE_MODES); a failed copy removes the document rather
+    /// than leave an empty or partial file. DISCARD: the document exists
+    /// but its source is gone, so it is removed. The open call, if any, is
+    /// answered; with none (Android recreated the activity while the screen
+    /// was up) the copy still finishes, from the source saved in the
+    /// activity's state, since the user did choose a place for it.
     private fun onSaveTargetPicked(resultCode: Int, data: Intent?) {
-        val reply = saveReply ?: return
+        val call = if (saves.isOpen) saveCall else null
         val uri = data?.data
-        val source = saveSource
-        if (resultCode != Activity.RESULT_OK || uri == null || source == null) {
-            saveReply = null
-            saveSource = null
-            reply.success(saveAnswer("cancelled"))
+        val source = pendingSaveSource
+        pendingSaveSource = null
+        val step = IntakeRules.saveStep(resultCode == Activity.RESULT_OK, uri != null, source != null)
+        if (step == IntakeRules.SaveStep.CANCEL || uri == null) {
+            call?.let { saves.answer(it, saveAnswer("cancelled")) }
+            return
+        }
+        if (step == IntakeRules.SaveStep.DISCARD || source == null) {
+            discardDocument(uri)
+            call?.let { saves.answer(it, saveAnswer("failed")) }
             return
         }
         Thread {
             val ok = try {
                 val file = cachedFile(source.path) ?: throw IllegalStateException()
-                val out = try {
-                    contentResolver.openOutputStream(uri, "wt")
-                } catch (e: Exception) {
-                    null
-                } ?: contentResolver.openOutputStream(uri, "w") // new, so empty
+                val out = IntakeRules.firstStream(IntakeRules.SAVE_MODES) { contentResolver.openOutputStream(uri, it) }
                 out?.use { o -> file.inputStream().use { it.copyTo(o, 64 * 1024) } } != null
             } catch (e: Exception) {
                 false
             }
-            if (!ok) {
-                try {
-                    DocumentsContract.deleteDocument(contentResolver, uri)
-                } catch (e: Exception) {
-                }
-            }
-            runOnUiThread {
-                if (saveReply === reply) {
-                    saveReply = null
-                    saveSource = null
-                }
-                reply.success(if (ok) saveAnswer("ok") else saveAnswer("failed"))
-            }
+            if (!ok) discardDocument(uri)
+            runOnUiThread { call?.let { saves.answer(it, if (ok) saveAnswer("ok") else saveAnswer("failed")) } }
         }.start()
+    }
+
+    /// Removes a document the create-document screen just made (best
+    /// effort): no empty or partial file is left where the user saves.
+    private fun discardDocument(uri: Uri) {
+        try {
+            DocumentsContract.deleteDocument(contentResolver, uri)
+        } catch (e: Exception) {
+        }
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -674,8 +664,8 @@ class MainActivity : FlutterActivity() {
         /// Dart's maxPhotoBytes: share intake refuses anything larger.
         const val MAX_SHARE_BYTES = 25L * 1024 * 1024
 
-        /// share_plus's FileProvider authority after the package name
-        /// (its AndroidManifest.xml: ${applicationId}.flutter.share_provider).
-        const val SHARE_OUT_AUTHORITY_SUFFIX = ".flutter.share_provider"
+        /// Saved state: the cached file an open create-document screen
+        /// was asked for (onSaveTargetPicked).
+        const val STATE_SAVE_SOURCE = "chopstats.saveFile.source"
     }
 }

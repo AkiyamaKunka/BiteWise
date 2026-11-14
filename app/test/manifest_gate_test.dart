@@ -58,6 +58,102 @@ String _mainActivity() => File('${_appRoot().path}/android/app/src/main/'
         'kotlin/dev/calorietracker/calorie_tracker/MainActivity.kt')
     .readAsStringSync();
 
+String _intakeRules() => File('${_appRoot().path}/android/app/src/main/'
+        'kotlin/dev/calorietracker/calorie_tracker/IntakeRules.kt')
+    .readAsStringSync();
+
+/// [kotlin] with its comments removed (string literals kept) and every run
+/// of whitespace collapsed to one space, so a pin matches code only: a
+/// commented-out line no longer satisfies it, and a reflow breaks nothing.
+String _kotlinCode(String kotlin) {
+  final out = StringBuffer();
+  var i = 0;
+  String? quote;
+  while (i < kotlin.length) {
+    final c = kotlin[i];
+    if (quote != null) {
+      out.write(c);
+      if (c == r'\' && i + 1 < kotlin.length) {
+        out.write(kotlin[i + 1]);
+        i += 2;
+        continue;
+      }
+      if (c == quote) quote = null;
+      i++;
+      continue;
+    }
+    if (c == '"' || c == "'") {
+      quote = c;
+      out.write(c);
+      i++;
+      continue;
+    }
+    if (kotlin.startsWith('//', i)) {
+      final end = kotlin.indexOf('\n', i);
+      i = end < 0 ? kotlin.length : end;
+      continue;
+    }
+    if (kotlin.startsWith('/*', i)) {
+      final end = kotlin.indexOf('*/', i + 2);
+      i = end < 0 ? kotlin.length : end + 2;
+      continue;
+    }
+    out.write(c);
+    i++;
+  }
+  return out.toString().replaceAll(RegExp(r'\s+'), ' ').trim();
+}
+
+/// The braced body of the function whose declaration starts with
+/// [declaration] in [code] (from [_kotlinCode]), braces included; '' for
+/// an expression body. Fails when the declaration is missing or repeated.
+String _kotlinFunction(String code, String declaration) {
+  expect(declaration.allMatches(code), hasLength(1), reason: declaration);
+  final start = code.indexOf(declaration);
+  // The parameter list, then a return type or not, then { or =.
+  var depth = 0;
+  var i = code.indexOf('(', start);
+  for (; i < code.length; i++) {
+    if (code[i] == '(') depth++;
+    if (code[i] == ')' && --depth == 0) break;
+  }
+  final open = code.indexOf('{', i);
+  final equals = code.indexOf('=', i);
+  if (equals >= 0 && equals < open) return '';
+  String? quote;
+  depth = 0;
+  for (var j = open; j < code.length; j++) {
+    final c = code[j];
+    if (quote != null) {
+      if (c == r'\') {
+        j++;
+      } else if (c == quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (c == '"' || c == "'") {
+      quote = c;
+    } else if (c == '{') {
+      depth++;
+    } else if (c == '}' && --depth == 0) {
+      return code.substring(open, j + 1);
+    }
+  }
+  fail('$declaration has no closing brace');
+}
+
+/// The JVM tests (android/app/src/test) exercise each of [rules].
+void _expectJvmTests(List<String> rules) {
+  final test = File('${_appRoot().path}/android/app/src/test/kotlin/dev/'
+      'calorietracker/calorie_tracker/IntakeRulesTest.kt');
+  expect(test.existsSync(), isTrue, reason: test.path);
+  final source = test.readAsStringSync();
+  for (final rule in rules) {
+    expect(source, contains(rule), reason: 'IntakeRulesTest never runs $rule');
+  }
+}
+
 /// Where pub resolved [package] (.dart_tool/package_config.json), so a
 /// gate can read the plugin version the app actually builds with.
 String _pluginRoot(String package) {
@@ -857,6 +953,12 @@ void main() {
     expect(releasing, contains('the lookup adds no data type'));
   });
 
+  // MainActivity's decisions live in IntakeRules.kt, where the JVM unit
+  // tests (android/app/src/test, run by mobile-build.yml) exercise them for
+  // real; the pins below hold MainActivity's wiring of them, on its code
+  // with the comments stripped and whitespace collapsed (so neither a
+  // commented-out line nor a reflow satisfies them).
+
   // A share is delivered once. After Android stops the process, reopening
   // the app from Recents or the icon recreates MainActivity with the
   // intent that first started its task (and the sender's grant), and
@@ -867,28 +969,26 @@ void main() {
   // which also keeps a bitewise://setup link from reopening its dialog.
   // New shares still arrive through onNewIntent, unchanged.
   test('a recreated MainActivity never re-delivers its launch share', () {
-    final kotlin = _mainActivity();
-    final create = RegExp(r'override fun onCreate\(.*?\n    \}', dotAll: true)
-        .firstMatch(kotlin)
-        ?.group(0);
-    expect(create, isNotNull);
-    final replay = RegExp(r'val replay = (.*?)\n\s*if \(replay\)', dotAll: true)
-        .firstMatch(create!)
-        ?.group(1);
-    expect(replay, isNotNull, reason: 'onCreate decides replay first');
-    expect(replay, contains('savedInstanceState != null ||'));
-    expect(replay,
-        contains('and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0'));
-    final empty = create.indexOf('setIntent(emptyShare(it))');
-    final safe = create.indexOf('setIntent(withSafeShares(it))');
-    final branch = create.indexOf('if (replay)');
-    final superCall = create.indexOf('super.onCreate(savedInstanceState)');
-    expect(branch, greaterThan(0));
-    expect(empty, greaterThan(branch), reason: 'replay → empty, no copy');
-    expect(safe, greaterThan(empty), reason: 'otherwise → the safe copies');
-    expect(superCall, greaterThan(safe),
-        reason: 'the plugins read the intent inside super.onCreate');
-    expect(kotlin, contains('super.onNewIntent(withSafeShares(intent))'));
+    final code = _kotlinCode(_mainActivity());
+    final create = _kotlinFunction(code, 'override fun onCreate(');
+    expect(
+        create,
+        contains('val replay = IntakeRules.isRedelivery(savedInstanceState '
+            '!= null, intent?.flags ?: 0) if (replay) { intent?.let { '
+            'setIntent(emptyShare(it)) } } else { intent?.let { '
+            'setIntent(withSafeShares(it)) } } super.onCreate('
+            'savedInstanceState)'),
+        reason: 'replay → the empty intent, else the safe copies, both '
+            'before the plugins read it in super.onCreate');
+    expect(_kotlinFunction(code, 'override fun onNewIntent('),
+        '{ super.onNewIntent(withSafeShares(intent)) }');
+    final rules = _kotlinCode(_intakeRules());
+    expect(
+        rules,
+        contains('fun isRedelivery(hasSavedState: Boolean, flags: Int): '
+            'Boolean = hasSavedState || (flags and '
+            'Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0'));
+    _expectJvmTests(['isRedelivery']);
   });
 
   // Chopstats is a target in its own sharesheet: Today's day image and the
@@ -897,24 +997,20 @@ void main() {
   // Share intake leaves out every stream from that provider; with nothing
   // left, the share reaches no plugin.
   test("share intake leaves out the app's own share-out files", () {
-    final kotlin = _mainActivity();
-    final safe = RegExp(r'private fun withSafeShares\(.*?\n    \}\n',
-            dotAll: true)
-        .firstMatch(kotlin)
-        ?.group(0);
-    expect(safe, isNotNull);
-    expect(kotlin,
-        contains('const val SHARE_OUT_AUTHORITY_SUFFIX = ".flutter.share_provider"'));
-    final skip = safe!.indexOf('if (isOwnShareOut(uri)) return@forEachIndexed');
-    expect(skip, greaterThan(0));
-    expect(safe.indexOf('copyShare(uri, name)'), greaterThan(skip),
+    final code = _kotlinCode(_mainActivity());
+    final safe = _kotlinFunction(code, 'private fun withSafeShares(');
+    expect(
+        safe,
+        contains('if (uri == null) return@forEachIndexed if '
+            '(IntakeRules.isOwnShareOut(uri.scheme, uri.authority, '
+            'packageName)) return@forEachIndexed val name = shareName(uri) '
+            '?: return@forEachIndexed'),
         reason: 'skipped before anything is read or copied');
     expect(safe, contains('if (copies.isEmpty()) return emptyShare(intent)'));
-    final own = RegExp(r'private fun isOwnShareOut\(uri: Uri\).*?\n\n',
-            dotAll: true)
-        .firstMatch(kotlin)
-        ?.group(0);
-    expect(own, contains(r'"$packageName$SHARE_OUT_AUTHORITY_SUFFIX"'));
+    final rules = _kotlinCode(_intakeRules());
+    expect(rules,
+        contains('const val SHARE_OUT_AUTHORITY_SUFFIX = ".flutter.share_provider"'));
+    _expectJvmTests(['isOwnShareOut']);
     // share_plus's provider: the applicationId, which is the package.
     final sharePlus = _pluginRoot('share_plus');
     final pluginManifest =
@@ -924,32 +1020,115 @@ void main() {
         contains(r'android:authorities="${applicationId}.flutter.share_provider"'));
   });
 
+  // A file:// URI into the app's own data is never copied, shared or
+  // picked (review 171, C5; review 2026-11-13 for picks).
+  test("neither a share nor a pick copies the app's own files", () {
+    final code = _kotlinCode(_mainActivity());
+    expect(
+        code,
+        contains('private fun isOwnFile(uri: Uri): Boolean = "file".equals('
+            'uri.scheme, ignoreCase = true) && IntakeRules.liesIn('
+            'File(applicationInfo.dataDir), uri.path)'));
+    expect(_kotlinFunction(code, 'private fun copyShare('),
+        startsWith('{ if (isOwnFile(uri)) return null '));
+    final picked = _kotlinFunction(code, 'private fun onPhotosPicked(');
+    final own = picked.indexOf('if (isOwnFile(uri)) { failed++ return@forEach }');
+    expect(own, greaterThan(0));
+    expect(picked.indexOf('copyAtMost(uri, out, MAX_SHARE_BYTES)'),
+        greaterThan(own));
+    _expectJvmTests(['liesIn']);
+  });
+
   // Log and Leftovers pick photos through the system Photo Picker, which
   // needs no permission (Play's Photo and Video FAQ asks apps to serve
   // users who grant no broad access). FlutterActivity is a plain Activity
   // with no registerForActivityResult, so MainActivity runs AndroidX's
   // contracts by hand: createIntent, startActivityForResult, parseResult.
   // Copies go to cacheDir/picked_photos/<uuid>/<name>, under the share cap.
+  // One call at a time, answered exactly once (SingleCall): a reply sent
+  // twice crashes, and a call never answered leaves every later pick busy.
   // The ModuleDependencies entry asks Play services for the backported
-  // picker on Android 7-10 (minSdk 24); elsewhere the contract falls back to
-  // ACTION_OPEN_DOCUMENT by itself.
+  // picker on Android 7-10 (minSdk 24); elsewhere the contract falls back
+  // to ACTION_OPEN_DOCUMENT by itself.
   test('MainActivity serves pickImages through the system photo picker', () {
-    final kotlin = _mainActivity();
-    expect(kotlin, contains('"pickImages" -> pickImages('));
-    expect(kotlin, contains('const val PICKED_PHOTO_FOLDER = "picked_photos"'));
-    expect(kotlin, contains('const val PHOTO_PICK_REQUEST = 4208'));
-    expect(kotlin, contains('ActivityResultContracts.PickVisualMedia()'));
-    expect(kotlin, contains('ActivityResultContracts.PickMultipleVisualMedia('));
-    expect(kotlin,
-        contains('PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)'));
-    expect(kotlin, contains('MediaStore.getPickImagesMaxLimit()'));
-    expect(kotlin, contains('startActivityForResult(intent, PHOTO_PICK_REQUEST)'));
-    expect(kotlin, contains('.parseResult(resultCode, data)'));
-    expect(kotlin, contains('copyAtMost(uri, out, MAX_SHARE_BYTES)'));
-    expect(kotlin, contains('MediaStore.MediaColumns.DATE_TAKEN'));
-    for (final status in ['ok', 'cancelled', 'busy', 'unavailable']) {
-      expect(kotlin, contains('"status" to "$status"'), reason: status);
-    }
+    final code = _kotlinCode(_mainActivity());
+    expect(
+        code,
+        contains('"pickImages" -> pickImages( (call.argument<Any?>("max") as? '
+            'Number)?.toInt() ?: 1, result, )'));
+    expect(code, contains('const val PICKED_PHOTO_FOLDER = "picked_photos"'));
+    expect(code, contains('const val PHOTO_PICK_REQUEST = 4208'));
+    expect(code, contains('PHOTO_PICK_REQUEST -> onPhotosPicked(resultCode, data)'));
+
+    final pick = _kotlinFunction(code, 'private fun pickImages(');
+    expect(
+        pick,
+        startsWith('{ if (photoPicks.isOpen) { result.success('
+            'photoPickAnswer("busy")) return } val max = '
+            'IntakeRules.pickMax(requested, systemPickLimit()) '));
+    expect(
+        pick,
+        contains('if (max == 1) ActivityResultContracts.PickVisualMedia()'
+            '.createIntent(this, request) else ActivityResultContracts'
+            '.PickMultipleVisualMedia(max).createIntent(this, request)'));
+    expect(
+        pick,
+        contains('PickVisualMediaRequest(ActivityResultContracts'
+            '.PickVisualMedia.ImageOnly)'));
+    expect(
+        pick,
+        contains('} catch (e: Exception) { result.success('
+            'photoPickAnswer("unavailable")) return } val call = '
+            'photoPicks.open { result.success(it) } ?: return '
+            'result.success(photoPickAnswer("busy")) photoPickCall = call '
+            'photoPickMax = max try { startActivityForResult(intent, '
+            'PHOTO_PICK_REQUEST) } catch (e: Exception) { '
+            'photoPicks.answer(call, photoPickAnswer("unavailable")) } }'));
+    expect(
+        _kotlinFunction(code, 'private fun systemPickLimit('),
+        isEmpty,
+        reason: 'an expression body, pinned below');
+    expect(
+        code,
+        contains('private fun systemPickLimit(): Int? = if '
+            '(Build.VERSION.SDK_INT >= 33 || (Build.VERSION.SDK_INT >= 30 && '
+            'SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R) >= 2) ) '
+            'MediaStore.getPickImagesMaxLimit() else null'));
+
+    final picked = _kotlinFunction(code, 'private fun onPhotosPicked(');
+    expect(
+        picked,
+        startsWith('{ if (!photoPicks.isOpen) return val call = '
+            'photoPickCall val max = photoPickMax '));
+    expect(picked,
+        contains('ActivityResultContracts.PickVisualMedia().parseResult('
+            'resultCode, data)'));
+    expect(picked,
+        contains('ActivityResultContracts.PickMultipleVisualMedia(max)'
+            '.parseResult(resultCode, data)'));
+    expect(
+        picked,
+        contains('val uris = IntakeRules.firstPicks(picked, max) if '
+            '(resultCode != Activity.RESULT_OK || uris.isEmpty()) { '
+            'photoPicks.answer(call, photoPickAnswer("cancelled")) return }'));
+    expect(
+        picked,
+        contains('val root = File(cacheDir, PICKED_PHOTO_FOLDER) '
+            'IntakeRules.tidyPickFolders(root, System.currentTimeMillis())'));
+    expect(picked, isNot(contains('deleteRecursively')),
+        reason: 'only tidyPickFolders clears earlier picks');
+    expect(picked, contains('copyAtMost(uri, out, MAX_SHARE_BYTES)'));
+    expect(picked, contains('val dir = File(root, UUID.randomUUID().toString())'));
+    expect(picked, contains('dateTaken(uri)?.let { item["dateTakenMs"] = it }'));
+    expect(
+        picked,
+        contains('runOnUiThread { photoPicks.answer(call, photoPickAnswer('
+            '"ok", items, tooBig, failed)) } }.start() }'));
+    expect('.success('.allMatches(picked), isEmpty,
+        reason: 'answers only through SingleCall, which answers once');
+    expect('photoPicks.answer('.allMatches(picked), hasLength(2));
+    expect(code, contains('MediaStore.MediaColumns.DATE_TAKEN'));
+    _expectJvmTests(['pickMax', 'firstPicks', 'tidyPickFolders', 'SingleCall']);
 
     final gradle = File('${_appRoot().path}/android/app/build.gradle.kts')
         .readAsStringSync();
@@ -984,69 +1163,138 @@ void main() {
   // Export › Save to device: a stock Pixel's sharesheet has no "save to
   // Files", so the export is written where the user picks with the
   // Storage Access Framework (no permission). The method only ever copies
-  // a file whose real path lies in the app's cache, where the export is
-  // written: never the database or anything else the app keeps.
+  // a regular file whose real path lies in the app's cache, where the
+  // export is written: never the database or anything else the app keeps.
+  // The new document is opened only in a truncating mode, and a failed
+  // copy removes it. If Android recreates the activity while the screen is
+  // up, the source survives in the saved state, so the user's pick still
+  // gets the file (or, with no source, the empty document is removed).
   test('MainActivity serves saveFile, from the cache only', () {
-    final kotlin = _mainActivity();
-    expect(kotlin, contains('"saveFile" -> saveFile('));
-    expect(kotlin, contains('const val SAVE_REQUEST = 4209'));
-    final save = RegExp(r'private fun saveFile\(.*?\n    \}\n', dotAll: true)
-        .firstMatch(kotlin)
-        ?.group(0);
-    expect(save, isNotNull);
-    expect(save, contains('Intent(Intent.ACTION_CREATE_DOCUMENT)'));
-    expect(save, contains('addCategory(Intent.CATEGORY_OPENABLE)'));
-    expect(save, contains('putExtra(Intent.EXTRA_TITLE,'));
-    expect(save, contains('startActivityForResult(intent, SAVE_REQUEST)'));
-    final cached = save!.indexOf('cachedFile(path)');
-    expect(cached, greaterThan(0));
-    expect(cached, lessThan(save.indexOf('startActivityForResult(')),
-        reason: 'the path is checked before anything is asked');
-    final check = RegExp(r'private fun cachedFile\(.*?\n    \}\n', dotAll: true)
-        .firstMatch(kotlin)
-        ?.group(0);
-    expect(check, contains('cacheDir.canonicalFile'));
-    expect(check, contains('.canonicalFile'));
-    expect(check, contains('startsWith(cache.path + File.separator)'));
-    final saved = RegExp(r'private fun onSaveTargetPicked\(.*?\n    \}\n',
-            dotAll: true)
-        .firstMatch(kotlin)
-        ?.group(0);
-    expect(saved, contains('cachedFile('),
-        reason: 'checked again when the copy starts');
-    expect(saved, contains('openOutputStream(uri, "wt")'));
-    for (final status in ['ok', 'cancelled', 'busy', 'unavailable', 'failed']) {
-      expect(kotlin, contains('saveAnswer("$status")'), reason: status);
-    }
+    final code = _kotlinCode(_mainActivity());
+    expect(
+        code,
+        contains('"saveFile" -> saveFile( call.argument<Any?>("path") as? '
+            'String, call.argument<Any?>("name") as? String, '
+            'call.argument<Any?>("mime") as? String, result, )'));
+    expect(code, contains('const val SAVE_REQUEST = 4209'));
+    expect(code, contains('SAVE_REQUEST -> onSaveTargetPicked(resultCode, data)'));
+    expect(
+        code,
+        contains('private fun cachedFile(path: String?): File? = '
+            'IntakeRules.regularFileIn(cacheDir, path)'));
+    final save = _kotlinFunction(code, 'private fun saveFile(');
+    expect(
+        save,
+        startsWith('{ if (saves.isOpen) { result.success(saveAnswer("busy")) '
+            'return } val source = cachedFile(path) if (source == null) { '
+            'result.success(saveAnswer("failed")) return } val intent = '
+            'Intent(Intent.ACTION_CREATE_DOCUMENT).apply { addCategory('
+            'Intent.CATEGORY_OPENABLE) '));
+    expect(save, contains('putExtra(Intent.EXTRA_TITLE, baseName(name) ?: source.name)'));
+    expect(
+        save,
+        contains('val call = saves.open { result.success(it) } ?: return '
+            'result.success(saveAnswer("busy")) saveCall = call '
+            'pendingSaveSource = source try { startActivityForResult(intent, '
+            'SAVE_REQUEST) } catch (e: Exception) { pendingSaveSource = null '
+            'saves.answer(call, saveAnswer("unavailable")) } }'));
+
+    final saved = _kotlinFunction(code, 'private fun onSaveTargetPicked(');
+    expect(
+        saved,
+        startsWith('{ val call = if (saves.isOpen) saveCall else null val uri '
+            '= data?.data val source = pendingSaveSource pendingSaveSource = '
+            'null val step = IntakeRules.saveStep(resultCode == '
+            'Activity.RESULT_OK, uri != null, source != null) if (step == '
+            'IntakeRules.SaveStep.CANCEL || uri == null) { call?.let { '
+            'saves.answer(it, saveAnswer("cancelled")) } return } if (step == '
+            'IntakeRules.SaveStep.DISCARD || source == null) { '
+            'discardDocument(uri) call?.let { saves.answer(it, '
+            'saveAnswer("failed")) } return } Thread { val ok = try { val '
+            'file = cachedFile(source.path) ?: throw IllegalStateException() '
+            'val out = IntakeRules.firstStream(IntakeRules.SAVE_MODES) { '
+            'contentResolver.openOutputStream(uri, it) } out?.use { o -> '
+            'file.inputStream().use { it.copyTo(o, 64 * 1024) } } != null } '
+            'catch (e: Exception) { false } if (!ok) discardDocument(uri) '
+            'runOnUiThread { call?.let { saves.answer(it, if (ok) '
+            'saveAnswer("ok") else saveAnswer("failed")) } } }.start() }'));
+    expect('.success('.allMatches(saved), isEmpty,
+        reason: 'answers only through SingleCall, which answers once');
+    expect(code, isNot(contains('openOutputStream(uri, "w")')),
+        reason: 'plain "w" may leave stale bytes; SAVE_MODES only');
+    expect(_kotlinFunction(code, 'private fun discardDocument('),
+        contains('DocumentsContract.deleteDocument(contentResolver, uri)'));
+    // The pending source outlives a recreated activity.
+    expect(_kotlinFunction(code, 'override fun onSaveInstanceState('),
+        '{ super.onSaveInstanceState(outState) pendingSaveSource?.let { '
+        'outState.putString(STATE_SAVE_SOURCE, it.path) } }');
+    final create = _kotlinFunction(code, 'override fun onCreate(');
+    expect(
+        create,
+        endsWith('super.onCreate(savedInstanceState) pendingSaveSource = '
+            'cachedFile(savedInstanceState?.getString(STATE_SAVE_SOURCE)) }'),
+        reason: 'restored through the same cache check');
+    _expectJvmTests(
+        ['regularFileIn', 'saveStep', 'SAVE_MODES', 'firstStream', 'SingleCall']);
   });
 
   // Settings' notifications-off remedy lands on the app's own
   // notification page (API 26+), not App info two taps away; App info
-  // stays the fallback. The background lane calls it and falls back to
-  // openAppSettings when it is not implemented.
+  // stays the fallback. True only when a page actually opened. The
+  // background lane calls it and falls back to openAppSettings when it is
+  // not implemented.
   test('MainActivity serves openNotificationSettings', () {
-    final kotlin = _mainActivity();
+    final code = _kotlinCode(_mainActivity());
     final channel = RegExp(
             r'MethodChannel\(flutterEngine\.dartExecutor\.binaryMessenger, '
-            r'CHANNEL\)(.*?)\n            \}',
+            r'CHANNEL\)(.*?)\}\s*\}',
             dotAll: true)
-        .firstMatch(kotlin)
+        .firstMatch(code)
         ?.group(1);
     expect(channel, contains('"openNotificationSettings" -> '
         'result.success(openNotificationSettings())'));
-    expect(kotlin, contains('const val CHANNEL = "dev.calorietracker/background"'));
-    final open = RegExp(r'private fun openNotificationSettings\(.*?\n    \}\n',
-            dotAll: true)
-        .firstMatch(kotlin)
-        ?.group(0);
-    expect(open, isNotNull);
-    final app = open!.indexOf('Settings.ACTION_APP_NOTIFICATION_SETTINGS');
-    expect(app, greaterThan(0));
-    expect(open, contains('Settings.EXTRA_APP_PACKAGE, packageName'));
-    expect(open, contains('Build.VERSION_CODES.O'));
-    expect(open.indexOf('Settings.ACTION_APPLICATION_DETAILS_SETTINGS'),
-        greaterThan(app), reason: 'App info is the fallback');
-    expect(open, contains('Uri.fromParts("package", packageName, null)'));
+    expect(code, contains('const val CHANNEL = "dev.calorietracker/background"'));
+    expect(
+        _kotlinFunction(code, 'private fun openNotificationSettings('),
+        '{ val pages = mutableListOf<Intent>() if (Build.VERSION.SDK_INT >= '
+        'Build.VERSION_CODES.O) { pages.add( Intent('
+        'Settings.ACTION_APP_NOTIFICATION_SETTINGS) .putExtra('
+        'Settings.EXTRA_APP_PACKAGE, packageName), ) } pages.add( Intent('
+        'Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts('
+        '"package", packageName, null)), ) return IntakeRules.openFirst(pages) '
+        '{ startActivity(it) } }');
+    _expectJvmTests(['openFirst']);
+  });
+
+  // The JVM unit tests run on CI (mobile-build.yml), and the built APK's
+  // permissions are checked there against an allowlist: the merged
+  // manifest, which this file cannot see, is what Play reviews. Every
+  // permission the main manifest declares must be on that list, so a new
+  // one needs a deliberate edit in both places.
+  test('CI runs the JVM unit tests and checks the APK permissions', () {
+    final root = _appRoot().parent.path;
+    final workflow =
+        File('$root/.github/workflows/mobile-build.yml').readAsStringSync();
+    expect(workflow, contains('./gradlew :app:testDebugUnitTest'));
+    expect(workflow, contains('flutter build apk --release'));
+    expect(workflow, contains('dump permissions'));
+    final allowed = RegExp(r'^\s+(android\.permission\.[A-Z_]+|'
+            r'dev\.calorietracker\.calorie_tracker\.[A-Z_]+)\s*$',
+            multiLine: true)
+        .allMatches(workflow)
+        .map((m) => m.group(1)!)
+        .toSet();
+    expect(allowed, containsAll(_declared(_manifest())));
+    for (final banned in [
+      'android.permission.FOREGROUND_SERVICE',
+      'android.permission.SCHEDULE_EXACT_ALARM',
+      'android.permission.USE_EXACT_ALARM',
+    ]) {
+      expect(allowed, isNot(contains(banned)));
+    }
+    final gradle = File('${_appRoot().path}/android/app/build.gradle.kts')
+        .readAsStringSync();
+    expect(gradle, contains('testImplementation("junit:junit:'));
   });
 
   // The daily summary is armed with the OS on Android too (background

@@ -151,4 +151,7 @@ dependencies {
     // The system Photo Picker contracts (MainActivity.pickImages) need
     // 1.7.0 or later; 1.9.0 is what the plugins already resolve.
     implementation("androidx.activity:activity-ktx:1.9.0")
+    // IntakeRulesTest (src/test): MainActivity's decisions on the JVM,
+    // `./gradlew :app:testDebugUnitTest` (mobile-build.yml).
+    testImplementation("junit:junit:4.13.2")
 }
