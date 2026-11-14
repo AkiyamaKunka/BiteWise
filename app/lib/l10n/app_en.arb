@@ -3451,9 +3451,5 @@
   "discardChangesDiscard": "Discard",
   "@discardChangesDiscard": {
     "description": "Discard-changes dialog: closes the screen and drops the unsaved typing (destructive style)."
-  },
-  "setupLinkCleartext": "This address starts with http://, so the connection to it is not encrypted. Your own server needs an https:// address.",
-  "@setupLinkCleartext": {
-    "description": "Added to the setup-link dialog when the link's server is a plain http:// address (Play User Data policy: personal data travels with modern cryptography). Neutral on purpose: whether such an address is refused is the privacy lane's kRequireHttpsServer switch."
   }
 }

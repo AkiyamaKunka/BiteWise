@@ -5482,12 +5482,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Discard'**
   String get discardChangesDiscard;
-
-  /// Added to the setup-link dialog when the link's server is a plain http:// address (Play User Data policy: personal data travels with modern cryptography). Neutral on purpose: whether such an address is refused is the privacy lane's kRequireHttpsServer switch.
-  ///
-  /// In en, this message translates to:
-  /// **'This address starts with http://, so the connection to it is not encrypted. Your own server needs an https:// address.'**
-  String get setupLinkCleartext;
 }
 
 class _AppLocalizationsDelegate

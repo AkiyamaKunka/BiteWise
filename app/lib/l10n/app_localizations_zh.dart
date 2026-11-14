@@ -3265,8 +3265,4 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discardChangesDiscard => '放弃';
-
-  @override
-  String get setupLinkCleartext =>
-      '此地址以 http:// 开头，与它的连接未加密。你自己的服务器需要使用 https:// 地址。';
 }

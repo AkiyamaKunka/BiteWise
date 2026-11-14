@@ -1011,6 +1011,5 @@
   "discardChangesTitle": "放弃更改？",
   "discardChangesBody": "你在这里的更改尚未保存。",
   "discardChangesKeep": "继续编辑",
-  "discardChangesDiscard": "放弃",
-  "setupLinkCleartext": "此地址以 http:// 开头，与它的连接未加密。你自己的服务器需要使用 https:// 地址。"
+  "discardChangesDiscard": "放弃"
 }

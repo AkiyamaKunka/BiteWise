@@ -402,10 +402,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 link.server,
                 providerDisplayLabel(ctx.l10n, 'server', link.backend),
                 link.keyTail),
-            // A plain-http server gets the photos, meal text and upload
-            // key unencrypted (Play's User Data policy wants modern
-            // cryptography in transit).
-            if (_isPlainHttp(link.server)) ctx.l10n.setupLinkCleartext,
             ctx.l10n.setupLinkSharing(aiConsentCompanyName(ctx.l10n,
                 provider: 'server', serverBackend: link.backend)),
             // The same mainland-China note the consent dialog adds: this
@@ -444,11 +440,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(l.setupLinkDone)));
   }
-
-  /// A link's server origin over plain http (parseSetupLink keeps the
-  /// scheme lower-case; any case is checked anyway).
-  static bool _isPlainHttp(String server) =>
-      Uri.tryParse(server)?.scheme.toLowerCase() == 'http';
 
   /// The restaurant assist paused for a consent that does not name the
   /// recipient a lookup would reach now (another provider or server, design

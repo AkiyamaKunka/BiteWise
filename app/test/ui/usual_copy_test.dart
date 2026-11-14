@@ -161,8 +161,8 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
 /// (leftoverLoadFailed, leftoverSaveFailed), then the Android push's ui
 /// lane: the discard-changes question (discardChangesTitle, Body, Keep,
-/// Discard) and the setup link's plain-http line (setupLinkCleartext).
-const _keyCount = 895;
+/// Discard).
+const _keyCount = 894;
 
 Directory _appRoot() {
   var dir = Directory.current;

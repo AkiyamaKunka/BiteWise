@@ -3631,8 +3631,4 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discardChangesDiscard => 'Discard';
-
-  @override
-  String get setupLinkCleartext =>
-      'This address starts with http://, so the connection to it is not encrypted. Your own server needs an https:// address.';
 }
