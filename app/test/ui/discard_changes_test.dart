@@ -5,6 +5,8 @@
 // leaves at once, so iOS keeps its swipe-back there. Save and Delete pop
 // as before. System back is driven through the binding, as Android's back
 // gesture and button arrive.
+import 'dart:async';
+
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/fix_meal_screen.dart';
@@ -264,6 +266,26 @@ void main() {
       expect(executor.handledTexts, isEmpty, reason: 'nothing was sent');
     });
 
+    // The request is on its way: nothing typed is lost by leaving, and the
+    // answer can take a server's 20 s. Back leaves, as before the guard.
+    testWidgets('while a request is sending, back leaves at once',
+        (tester) async {
+      final reply = Completer<List<NlReply>>();
+      final executor = _SlowExecutor(reply.future);
+      await _push(tester,
+          FixMealScreen(executor: executor, settings: FakeSettings()));
+      await tester.enterText(
+          find.byKey(const Key('fixMealField')), 'the latte was oat milk');
+      await tester.tap(find.byKey(const Key('fixMealSend')));
+      await tester.pump();
+      expect(executor.handledTexts, ['the latte was oat milk']);
+      await _systemBack(tester);
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.byType(FixMealScreen), findsNothing);
+      reply.complete(const [NlReply('✏️ Corrected.', applied: true)]);
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('an applied request clears the field: back leaves at once',
         (tester) async {
       final executor = FakeExecutor()
@@ -363,4 +385,15 @@ void main() {
     expect(find.byType(ProfileSettingsPage), findsNothing);
     expect(settings.dietaryProfile, 'vegetarian');
   });
+}
+
+class _SlowExecutor extends FakeExecutor {
+  _SlowExecutor(this._reply);
+  final Future<List<NlReply>> _reply;
+
+  @override
+  Future<List<NlReply>> handleText(String userText) {
+    handledTexts.add(userText);
+    return _reply;
+  }
 }

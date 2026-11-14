@@ -52,8 +52,9 @@ class _FixMealScreenState extends State<FixMealScreen> {
 
   /// A request typed and not sent (or not applied: the field keeps it
   /// then). A back gesture asks before it drops that; a field emptied by
-  /// an applied request leaves freely.
-  bool get _typed => _controller.text.trim().isNotEmpty;
+  /// an applied request, or a request on its way (nothing typed is lost
+  /// by leaving, and a server's answer can take 20 s), leaves freely.
+  bool get _typed => !_sending && _controller.text.trim().isNotEmpty;
   bool _shownTyped = false;
 
   @override
@@ -151,7 +152,6 @@ class _FixMealScreenState extends State<FixMealScreen> {
     _shownTyped = _typed;
     return DiscardChangesGuard(
       dirty: _shownTyped,
-      busy: _sending,
       child: Scaffold(
         appBar: AppBar(title: Text(context.l10n.fixTitle)),
         // Scrollable for the same reason as AddTextScreen: autofocused
