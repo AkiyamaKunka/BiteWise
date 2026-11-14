@@ -583,11 +583,13 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     // form — the user pressed Save on what they saw — it is a conflict.
     final basis = _basisRead;
     if (basis != null) {
-      _saving = true; // also the re-entry guard
+      // Also the re-entry guard, and built: a back gesture meanwhile is a
+      // save under way, not a question (DiscardChangesGuard busy).
+      setState(() => _saving = true);
       try {
         await basis;
       } finally {
-        _saving = false;
+        if (mounted) setState(() => _saving = false);
       }
       if (!mounted) return;
     }

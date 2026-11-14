@@ -19,39 +19,47 @@ import '../l10n.dart';
 import '../theme/app_dialog.dart';
 import '../theme/app_theme.dart' show AppButtonStyles;
 
-/// 'Discard changes?': true = Discard, false (Keep editing, a tap outside
-/// or back) = stay.
-Future<bool> confirmDiscardChanges(BuildContext context) async {
-  final discard = await showDialog<bool>(
-    context: context,
-    builder: (ctx) {
-      final l = ctx.l10n;
-      return appAlertDialog(
-        key: const Key('discardChangesDialog'),
-        title: Text(l.discardChangesTitle),
-        content: Text(l.discardChangesBody),
-        actions: [
-          TextButton(
-              key: const Key('discardChangesKeep'),
-              onPressed: () => Navigator.pop(ctx, false),
-              child: Text(l.discardChangesKeep)),
-          FilledButton(
-              key: const Key('discardChangesDiscard'),
-              style: AppButtonStyles.destructive(ctx),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: Text(l.discardChangesDiscard)),
-        ],
-      );
-    },
-  );
-  return discard == true;
-}
+/// The two answers of the discard question. Any other result the
+/// question's dialog closes with is a screen's own pop that reached the
+/// dialog while it was open ([DiscardChangesGuard] hands it on).
+enum DiscardAnswer { keep, discard }
 
-/// Holds the route's pop while [dirty] and asks [confirmDiscardChanges];
+/// 'Discard changes?': [DiscardAnswer.discard], [DiscardAnswer.keep], null
+/// (a tap outside or back: stay), or whatever a pop meant for the screen
+/// under it closed it with.
+Future<Object?> _askDiscardChanges(BuildContext context) => showDialog<Object?>(
+      context: context,
+      builder: (ctx) {
+        final l = ctx.l10n;
+        return appAlertDialog(
+          key: const Key('discardChangesDialog'),
+          title: Text(l.discardChangesTitle),
+          content: Text(l.discardChangesBody),
+          actions: [
+            TextButton(
+                key: const Key('discardChangesKeep'),
+                onPressed: () => Navigator.pop(ctx, DiscardAnswer.keep),
+                child: Text(l.discardChangesKeep)),
+            FilledButton(
+                key: const Key('discardChangesDiscard'),
+                style: AppButtonStyles.destructive(ctx),
+                onPressed: () => Navigator.pop(ctx, DiscardAnswer.discard),
+                child: Text(l.discardChangesDiscard)),
+          ],
+        );
+      },
+    );
+
+/// Holds the route's pop while [dirty] and asks 'Discard changes?';
 /// Discard pops the route (with no result, like a plain back). While
-/// [busy] (a save or delete under way) a held pop is ignored: the
-/// screen's own pop when that finishes would otherwise close the question
-/// instead of the screen.
+/// [busy] (a save or delete under way) a held pop is ignored: the screen
+/// closes itself when that finishes.
+///
+/// If the screen pops itself while the question is open anyway (an
+/// asynchronous path that is not [busy]), that pop closes the question
+/// instead: the guard hands its result on, so the screen still closes
+/// and its caller gets what it was given (review 2026-11-13: a Save's
+/// `true` read as Discard, and the caller got null).
 class DiscardChangesGuard extends StatefulWidget {
   const DiscardChangesGuard({
     super.key,
@@ -69,23 +77,30 @@ class DiscardChangesGuard extends StatefulWidget {
 }
 
 class _DiscardChangesGuardState extends State<DiscardChangesGuard> {
-  /// The question is open: a second back while it is up asks nothing more.
+  /// The question is open, or about to be: two pops that reach the guard
+  /// before its dialog is up ask once.
   bool _asking = false;
 
   Future<void> _held() async {
     if (_asking || widget.busy) return;
     _asking = true;
-    final bool discard;
+    final Object? answer;
     try {
-      discard = await confirmDiscardChanges(context);
+      answer = await _askDiscardChanges(context);
     } finally {
       _asking = false;
     }
-    if (!discard || !mounted) return;
-    // Still the route on top (nothing else popped it meanwhile): leave.
+    if (!mounted || answer == null || answer == DiscardAnswer.keep) return;
+    // Only while this screen is the route on top: a route that came up
+    // meanwhile is not popped in its place.
     final route = ModalRoute.of(context);
     if (route != null && !route.isCurrent) return;
-    Navigator.of(context).pop();
+    final navigator = Navigator.of(context);
+    if (answer == DiscardAnswer.discard) {
+      navigator.pop();
+    } else {
+      navigator.pop(answer); // the screen's own pop, handed on
+    }
   }
 
   @override

@@ -13,6 +13,7 @@ import 'package:calorie_tracker/ui/screens/fix_meal_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/settings/profile_page.dart';
 import 'package:calorie_tracker/ui/theme/app_theme.dart';
+import 'package:calorie_tracker/ui/widgets/discard_guard.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
@@ -45,7 +46,7 @@ const _discard = Key('discardChangesDiscard');
 
 /// [screen] pushed over a home page, so a pop has somewhere to go.
 Future<void> _push(WidgetTester tester, Widget screen,
-    {ThemeData? theme}) async {
+    {ThemeData? theme, void Function(Object?)? onResult}) async {
   tester.view.physicalSize = const Size(1200, 2600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
@@ -56,8 +57,11 @@ Future<void> _push(WidgetTester tester, Widget screen,
         body: Center(
           child: TextButton(
             key: _open,
-            onPressed: () => Navigator.of(context)
-                .push(MaterialPageRoute<void>(builder: (_) => screen)),
+            onPressed: () async {
+              final r = await Navigator.of(context)
+                  .push(MaterialPageRoute<Object?>(builder: (_) => screen));
+              onResult?.call(r);
+            },
             child: const Text('open'),
           ),
         ),
@@ -72,6 +76,14 @@ Future<void> _push(WidgetTester tester, Widget screen,
 Future<void> _systemBack(WidgetTester tester) async {
   await tester.binding.handlePopRoute();
   await tester.pumpAndSettle();
+}
+
+/// The same while a spinner runs (a save under way never settles): long
+/// enough for a question's dialog to have come up.
+Future<void> _systemBackBusy(WidgetTester tester) async {
+  await tester.binding.handlePopRoute();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 void main() {
@@ -177,6 +189,68 @@ void main() {
       await tester.tap(find.text('23'));
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
+      await _systemBack(tester);
+      expect(find.byKey(_dialog), findsOneWidget);
+    });
+
+    // Review 2026-11-13: Save waits for the open-time read of the row
+    // first, and that wait did not mark the editor busy. Back then asked;
+    // Save's own pop closed the question instead of the editor, the guard
+    // took that for Discard and popped again: the caller got null.
+    testWidgets('back while Save waits for the row: no question, the editor '
+        'closes with true', (tester) async {
+      final dao = _GatedSnapDao()..seed(_meal());
+      final gate = Completer<void>();
+      dao.gate = gate;
+      Object? result = 'unset';
+      await _push(tester,
+          MealEditorScreen(dao: dao, meal: dao.meals.first, now: _clock),
+          onResult: (r) => result = r);
+      await tester.enterText(find.byKey(const Key('editorCalories')), '520');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pump();
+      await _systemBackBusy(tester);
+      expect(find.byKey(_dialog), findsNothing,
+          reason: 'a save under way is not asked about');
+      expect(find.byType(MealEditorScreen), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(MealEditorScreen), findsNothing);
+      expect(result, isTrue);
+      expect(dao.meals.first.analysis['total_calories'], 520);
+    });
+
+    testWidgets('back while the write itself runs: no question either',
+        (tester) async {
+      final dao = _GatedWriteDao()..seed(_meal());
+      Object? result = 'unset';
+      await _push(tester,
+          MealEditorScreen(dao: dao, meal: dao.meals.first, now: _clock),
+          onResult: (r) => result = r);
+      await tester.pumpAndSettle(); // the open-time read is done
+      await tester.enterText(find.byKey(const Key('editorCalories')), '520');
+      await tester.pump();
+      final gate = Completer<void>();
+      dao.gate = gate;
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pump();
+      await _systemBackBusy(tester);
+      expect(find.byKey(_dialog), findsNothing);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(MealEditorScreen), findsNothing);
+      expect(result, isTrue);
+    });
+
+    // Only the description typed in a new meal: no number changed, so no
+    // other listener rebuilt the form, and back left without asking.
+    testWidgets('a new meal with only a description typed asks',
+        (tester) async {
+      await _push(tester, MealEditorScreen(dao: FakeDao(), now: _clock));
+      await tester.enterText(
+          find.byKey(const Key('editorDescription')), 'Pho with brisket');
+      await tester.pump();
       await _systemBack(tester);
       expect(find.byKey(_dialog), findsOneWidget);
     });
@@ -433,6 +507,52 @@ void main() {
       expect(find.byKey(const Key('bodySheetSave')), findsNothing);
     });
 
+    testWidgets('back while the weight is being saved: no question, the '
+        'sheet closes saved', (tester) async {
+      final dao = await openSheet(tester, dao: _GatedBodyDao());
+      await tester.enterText(find.byKey(const Key('bodyWeightField')), '72.5');
+      await tester.pump();
+      final gate = Completer<void>();
+      dao.saveGate = gate;
+      await tester.tap(find.byKey(const Key('bodySheetSave')));
+      await tester.pump();
+      await _systemBackBusy(tester);
+      expect(find.byKey(_dialog), findsNothing);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('bodySheetSave')), findsNothing);
+      expect(dao.weightsByDate['2026-08-02']?.kg, 72.5);
+    });
+
+    // Review 2026-11-13: a delete did not mark the sheet busy. Back during
+    // it asked; the delete's own pop closed the question instead of the
+    // sheet, which stayed on the deleted day, and Save then wrote the
+    // deleted weight back.
+    testWidgets('back while the day is being deleted: no question, the sheet '
+        'closes, nothing comes back', (tester) async {
+      final dao = _GatedBodyDao();
+      dao.weightsByDate['2026-08-02'] =
+          const WeightEntry('2026-08-02', 72.5, source: 'manual');
+      await openSheet(tester, dao: dao);
+      await tester.enterText(find.byKey(const Key('bodyWaistField')), '83');
+      await tester.pump();
+      final gate = Completer<void>();
+      dao.deleteGate = gate;
+      await tester.tap(find.byKey(const Key('bodySheetDelete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+      await tester.pump();
+      await _systemBackBusy(tester);
+      expect(find.byKey(_dialog), findsNothing);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.byKey(const Key('bodySheetSave')), findsNothing,
+          reason: 'the sheet closed with the delete');
+      expect(dao.weightsByDate, isEmpty);
+      expect(dao.measurementsByDate, isEmpty);
+    });
+
     testWidgets('Save with a typed weight closes it, no question',
         (tester) async {
       final dao = await openSheet(tester);
@@ -442,6 +562,80 @@ void main() {
       expect(find.byKey(_dialog), findsNothing);
       expect(find.byKey(const Key('bodySheetSave')), findsNothing);
       expect(dao.weightsByDate['2026-08-02']?.kg, 72.5);
+    });
+  });
+
+  group('DiscardChangesGuard', () {
+    Future<BuildContext> pushGuarded(WidgetTester tester,
+        {void Function(Object?)? onResult}) async {
+      late BuildContext screen;
+      await _push(
+          tester,
+          DiscardChangesGuard(
+            dirty: true,
+            child: Builder(builder: (context) {
+              screen = context;
+              return const Scaffold(body: Text('guarded'));
+            }),
+          ),
+          onResult: onResult);
+      return screen;
+    }
+
+    // Two pops reaching the guard before the question is up (a back
+    // gesture and another pop in the same frame) ask once.
+    testWidgets('one question at a time', (tester) async {
+      await pushGuarded(tester);
+      final scope = tester.widget<PopScope<Object?>>(find.byWidgetPredicate(
+          (w) => w is PopScope<Object?> && !w.canPop));
+      scope.onPopInvokedWithResult!(false, null);
+      scope.onPopInvokedWithResult!(false, null);
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialog), findsOneWidget);
+    });
+
+    // Discard pops the guarded screen only while it is the screen on top:
+    // a route that came up meanwhile is not popped in its place.
+    testWidgets('Discard pops nothing once another route is on top',
+        (tester) async {
+      final screen = await pushGuarded(tester);
+      await _systemBack(tester);
+      final dialog = tester.element(find.byKey(_dialog));
+      Navigator.of(dialog).pop(DiscardAnswer.discard);
+      Navigator.of(screen).push(MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('on top'))));
+      await tester.pumpAndSettle();
+      expect(find.text('on top'), findsOneWidget);
+      expect(find.text('guarded', skipOffstage: false), findsOneWidget);
+    });
+
+    // A screen that pops itself while its question is open (a save that
+    // finished) closes the question with its result; the guard hands that
+    // result on, so the screen closes and its caller gets it.
+    testWidgets("a screen's own pop during the question reaches its caller",
+        (tester) async {
+      Object? result = 'unset';
+      final screen = await pushGuarded(tester, onResult: (r) => result = r);
+      await _systemBack(tester);
+      expect(find.byKey(_dialog), findsOneWidget);
+      Navigator.of(screen).pop(true);
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.text('guarded'), findsNothing);
+      expect(result, isTrue);
+    });
+
+    testWidgets('Keep Editing and a tap outside both stay', (tester) async {
+      await pushGuarded(tester);
+      await _systemBack(tester);
+      await tester.tap(find.byKey(_keep));
+      await tester.pumpAndSettle();
+      expect(find.text('guarded'), findsOneWidget);
+      await _systemBack(tester);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byKey(_dialog), findsNothing);
+      expect(find.text('guarded'), findsOneWidget);
     });
   });
 
@@ -469,5 +663,55 @@ class _SlowExecutor extends FakeExecutor {
   Future<List<NlReply>> handleText(String userText) {
     handledTexts.add(userText);
     return _reply;
+  }
+}
+
+/// The open-time read of the row waits for [gate].
+class _GatedSnapDao extends FakeDao {
+  Completer<void>? gate;
+
+  @override
+  Future<MealSnapshot?> mealSnapshot(int mealId) async {
+    final g = gate;
+    if (g != null) await g.future;
+    return super.mealSnapshot(mealId);
+  }
+}
+
+/// The save's compare-and-set write waits for [gate].
+class _GatedWriteDao extends FakeDao {
+  Completer<void>? gate;
+
+  @override
+  Future<bool> updateMealFieldsIfUnchanged(int mealId,
+      {required String expectedRaw,
+      Map<String, dynamic>? analysis,
+      String? date,
+      String? time}) async {
+    final g = gate;
+    if (g != null) await g.future;
+    return super.updateMealFieldsIfUnchanged(mealId,
+        expectedRaw: expectedRaw, analysis: analysis, date: date, time: time);
+  }
+}
+
+/// The Body sheet's weight write and delete wait for their gates.
+class _GatedBodyDao extends FakeDao {
+  Completer<void>? saveGate;
+  Completer<void>? deleteGate;
+
+  @override
+  Future<void> saveBodyWeight(String date, double kg,
+      {String source = 'nl'}) async {
+    final g = saveGate;
+    if (g != null) await g.future;
+    return super.saveBodyWeight(date, kg, source: source);
+  }
+
+  @override
+  Future<void> deleteBodyWeight(String date) async {
+    final g = deleteGate;
+    if (g != null) await g.future;
+    return super.deleteBodyWeight(date);
   }
 }

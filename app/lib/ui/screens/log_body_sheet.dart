@@ -112,6 +112,14 @@ class _LogBodySheetState extends State<LogBodySheet> {
   String? _error;
   bool _saving = false;
 
+  /// [LogBodySheet.onDelete] is running (its question, then the delete).
+  /// A back gesture meanwhile is ignored: the delete's own pop closed the
+  /// discard question instead of the sheet, which stayed on the deleted
+  /// day, and Save then wrote the deleted values back (review 2026-11-13).
+  bool _deleting = false;
+
+  bool get _busy => _saving || _deleting;
+
   /// The stored values as the fields first show them: the baseline that
   /// tells typed text from an untouched prefill.
   late final String _storedWeight =
@@ -293,17 +301,28 @@ class _LogBodySheetState extends State<LogBodySheet> {
 
   Future<void> _delete() async {
     final l = context.l10n;
+    setState(() => _deleting = true);
     final bool deleted;
     try {
       deleted = await widget.onDelete!();
     } catch (_) {
       // Logged by the screen, which shows what is left. Said here, where
       // the user is looking: a snackbar would sit under the sheet.
-      if (mounted) setState(() => _error = l.bodyDeleteFailed);
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+          _error = l.bodyDeleteFailed;
+        });
+      }
       return;
     }
+    if (!mounted) return;
     // The page reloaded already; false tells it not to reload again.
-    if (deleted && mounted) Navigator.pop(context, false);
+    if (deleted) {
+      Navigator.pop(context, false);
+    } else {
+      setState(() => _deleting = false);
+    }
   }
 
   Widget _field(
@@ -366,7 +385,7 @@ class _LogBodySheetState extends State<LogBodySheet> {
     // modal sheet pops there directly); see body_screen.dart.
     return DiscardChangesGuard(
       dirty: _shownTyped,
-      busy: _saving,
+      busy: _busy,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
             AppSpace.gutter, 0, AppSpace.gutter, AppSpace.s8),
@@ -385,7 +404,7 @@ class _LogBodySheetState extends State<LogBodySheet> {
                   icon: Icons.calendar_today_rounded,
                   title: l.bodySheetDate,
                   value: dateLabel,
-                  onTap: _saving ? null : _changeDate,
+                  onTap: _busy ? null : _changeDate,
                 ),
               ),
               const SizedBox(height: AppSpace.s12),
@@ -413,7 +432,7 @@ class _LogBodySheetState extends State<LogBodySheet> {
             const SizedBox(height: AppSpace.s20),
             FilledButton(
               key: const Key('bodySheetSave'),
-              onPressed: _saving ? null : _save,
+              onPressed: _busy ? null : _save,
               child: Text(_saving ? l.saving : l.save),
             ),
             if (onDelete != null) ...[
@@ -426,7 +445,7 @@ class _LogBodySheetState extends State<LogBodySheet> {
                           ? colors.danger.withValues(alpha: 0.4)
                           : colors.danger),
                 ),
-                onPressed: _saving ? null : _delete,
+                onPressed: _busy ? null : _delete,
                 child: Text(l.delete),
               ),
             ],
