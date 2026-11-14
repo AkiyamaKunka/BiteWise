@@ -6,6 +6,9 @@
 /// screen.
 library;
 
+import 'dart:ui' as ui show PlatformDispatcher;
+
+import 'package:flutter/widgets.dart' show WidgetsBinding;
 import 'package:intl/intl.dart';
 
 import '../core/coerce.dart';
@@ -185,16 +188,43 @@ String friendlyHistoryDay(String date,
   return DateFormat(pattern, localeName).format(parsed);
 }
 
-/// Stored meal clock → locale display. English passes the stored string
-/// through UNTOUCHED (it already is the en display; intl's own en output
-/// would sneak in a U+202F before AM). Chinese reformats to the 24-hour
-/// '08:05' CLDR gives zh. STORAGE is untouched — meals.time keeps the
-/// server-parity `%I:%M %p` shape; anything unparseable renders raw
-/// (poison rows degrade, spec §1.2).
-String displayClock(String raw, {String? localeName}) {
-  if (localeName == null || !localeName.startsWith('zh')) return raw;
+/// The phone's own 12/24-hour setting (Android's 'Use 24-hour format',
+/// iOS's 24-Hour Time), as Flutter reports it: the same value
+/// MediaQuery.alwaysUse24HourFormat carries, read here for code without a
+/// BuildContext. A headless background engine has no view and reads false.
+bool phoneUses24HourClock() {
+  try {
+    return WidgetsBinding.instance.platformDispatcher.alwaysUse24HourFormat;
+  } catch (_) {
+    // No binding yet (a plain unit test or an early isolate).
+    return ui.PlatformDispatcher.instance.alwaysUse24HourFormat;
+  }
+}
+
+/// A time of day for an English reader: '9:30 PM' (no leading zero, the
+/// way Material's formatTimeOfDay and Report Time write it) or '21:30'.
+String englishClock(int hour, int minute, {required bool use24h}) {
+  final mm = minute.toString().padLeft(2, '0');
+  if (use24h) return '${hour.toString().padLeft(2, '0')}:$mm';
+  final h12 = hour % 12 == 0 ? 12 : hour % 12;
+  return '$h12:$mm ${hour < 12 ? 'AM' : 'PM'}';
+}
+
+/// Stored meal clock → locale display. English follows the phone's 12/24-
+/// hour setting ([use24h] overrides it; tests): '4:56 AM' or '04:56' for a
+/// stored '04:56 AM' (it was passed through as stored, so a 24-hour phone
+/// read '04:56 AM' on every meal card, beside a 24-hour Report Time).
+/// Chinese reformats to the 24-hour '08:05' CLDR gives zh either way.
+/// STORAGE is untouched — meals.time keeps the server-parity `%I:%M %p`
+/// shape; anything unparseable renders raw (poison rows degrade, spec
+/// §1.2).
+String displayClock(String raw, {String? localeName, bool? use24h}) {
   final t = parseClock(raw);
   if (t == null) return raw;
+  if (localeName == null || !localeName.startsWith('zh')) {
+    return englishClock(t.hour, t.minute,
+        use24h: use24h ?? phoneUses24HourClock());
+  }
   return DateFormat.jm(localeName)
       .format(DateTime(2000, 1, 1, t.hour, t.minute));
 }

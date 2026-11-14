@@ -1064,7 +1064,7 @@ void planTuningTests() {
       await tester.pumpWidget(screen(next: () async => today));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('nextSummaryRow')), findsOneWidget);
-      expect(find.textContaining('21:30'), findsOneWidget);
+      expect(find.textContaining('Today 9:30 PM'), findsOneWidget);
       expect(find.textContaining('Today'), findsOneWidget);
       final tomorrow = today.add(const Duration(days: 1));
       await tester.pumpWidget(screen(next: () async => tomorrow));
@@ -1093,7 +1093,7 @@ void planTuningTests() {
       expect(find.text('…'), findsNothing);
       expect(find.textContaining('Not scheduled'), findsNothing);
       expect(find.textContaining('Tomorrow'), findsOneWidget);
-      expect(find.textContaining('21:30'), findsOneWidget);
+      expect(find.textContaining('Tomorrow 9:30 PM'), findsOneWidget);
     });
 
     testWidgets('background-scan row: last OS launch, or "Not run yet"',
@@ -1111,7 +1111,7 @@ void planTuningTests() {
       await tester.pumpWidget(bg(() async => yesterday));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
-      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      expect(find.textContaining('Yesterday 2:02 PM'), findsOneWidget);
       await tester.pumpWidget(bg(() async => null));
       await tester.pumpAndSettle();
       expect(find.text('Not run yet'), findsOneWidget);
@@ -1202,7 +1202,7 @@ void planTuningTests() {
       final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
       await tester.pumpWidget(bg(last: () async => yesterday));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      expect(find.textContaining('Yesterday 2:02 PM'), findsOneWidget);
       expect(find.textContaining('iOS decides when the background scan runs'),
           findsOneWidget);
       expect(find.textContaining('app switcher'), findsOneWidget);
@@ -1236,7 +1236,7 @@ void planTuningTests() {
         openSystemSettings: () async {},
       )));
       await tester.pumpAndSettle();
-      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      expect(find.textContaining('Yesterday 2:02 PM'), findsOneWidget);
       expect(find.textContaining('app switcher'), findsNothing);
       expect(find.textContaining('iOS decides'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));

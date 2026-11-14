@@ -70,6 +70,7 @@ import '../../services/photo/glasses.dart'
     show captureAnalysis, isMetaGlassesAnalysis;
 import '../../services/usual/usual_foods.dart';
 import '../assist_lookup_text.dart';
+import '../app_formats.dart';
 import '../assist_view.dart';
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
@@ -1425,7 +1426,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                   key: const Key('editorDateButton'),
                   onPressed: locked ? null : _pickDate,
                   icon: const Icon(Icons.event_outlined, size: 18),
-                  label: Text(_draft.dateIso),
+                  // 'Jul 24' / '7月24日', with the year when it is not
+                  // this year's (the raw '2026-07-24' read as a code).
+                  label: Text(AppFormats.shortDate(context, _draft.dateIso,
+                      now: (widget.now ?? DateTime.now)())),
                 ),
                 OutlinedButton.icon(
                   key: const Key('editorTimeButton'),
