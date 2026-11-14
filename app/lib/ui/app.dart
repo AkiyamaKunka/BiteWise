@@ -36,6 +36,7 @@ import 'screens/settings_screen.dart';
 import 'screens/today_screen.dart';
 import 'refresh_signal.dart';
 import 'services.dart';
+import 'widgets/grouped.dart' show ContentWidthCap;
 import 'widgets/restaurant_consent_sheet.dart';
 
 class _AppleScrollBehavior extends MaterialScrollBehavior {
@@ -606,55 +607,58 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final s = widget.services;
     final shell = Scaffold(
       // No shared AppBar: each tab renders its own iOS-style large title
-      // that collapses as it scrolls (SliverAppBar.large).
-      body: IndexedStack(
-        index: _index,
-        children: _onlySelectedRebuilds([
-          TodayScreen(
-              key: _todayKey,
-              dao: s.dao,
-              thumbs: s.thumbs,
-              garminDaily: s.garminDaily,
-              mealInUse: s.mealInUse,
-              restaurantAssist: s.restaurantAssist,
+      // that collapses as it scrolls (SliverAppBar.large). A centred
+      // column on tablets, foldables and Chromebooks (ContentWidthCap).
+      body: ContentWidthCap(
+        child: IndexedStack(
+          index: _index,
+          children: _onlySelectedRebuilds([
+            TodayScreen(
+                key: _todayKey,
+                dao: s.dao,
+                thumbs: s.thumbs,
+                garminDaily: s.garminDaily,
+                mealInUse: s.mealInUse,
+                restaurantAssist: s.restaurantAssist,
+                settings: s.settings,
+                usual: s.usualFoods),
+            HistoryScreen(
+                key: _historyKey,
+                dao: s.dao,
+                thumbs: s.thumbs,
+                mealInUse: s.mealInUse,
+                restaurantAssist: s.restaurantAssist,
+                settings: s.settings),
+            BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
+            SettingsScreen(
               settings: s.settings,
-              usual: s.usualFoods),
-          HistoryScreen(
-              key: _historyKey,
+              analyzer: s.analyzer,
               dao: s.dao,
-              thumbs: s.thumbs,
-              mealInUse: s.mealInUse,
+              requestPhotoPermission: s.requestPhotoPermission,
+              photoIntake: s.photoIntake,
+              coverage: s.coverage,
+              processPhoto: s.processPhoto,
+              photoLibrary: s.photoLibrary,
+              startClaudeAuth: s.startClaudeAuth,
+              completeClaudeAuth: s.completeClaudeAuth,
+              serverLoginState: s.serverLoginState,
+              openSystemSettings: s.openSystemSettings,
+              notificationsEnabled: s.notificationsEnabled,
+              nextSummaryAt: s.nextSummaryAt,
+              lastBackgroundScan: s.lastBackgroundScan,
+              backgroundRefreshEnabled: s.backgroundRefreshEnabled,
+              backgroundScanStuck: s.backgroundScanStuck,
+              changes: s.settingsChanges,
               restaurantAssist: s.restaurantAssist,
-              settings: s.settings),
-          BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
-          SettingsScreen(
-            settings: s.settings,
-            analyzer: s.analyzer,
-            dao: s.dao,
-            requestPhotoPermission: s.requestPhotoPermission,
-            photoIntake: s.photoIntake,
-            coverage: s.coverage,
-            processPhoto: s.processPhoto,
-            photoLibrary: s.photoLibrary,
-            startClaudeAuth: s.startClaudeAuth,
-            completeClaudeAuth: s.completeClaudeAuth,
-            serverLoginState: s.serverLoginState,
-            openSystemSettings: s.openSystemSettings,
-            notificationsEnabled: s.notificationsEnabled,
-            nextSummaryAt: s.nextSummaryAt,
-            lastBackgroundScan: s.lastBackgroundScan,
-            backgroundRefreshEnabled: s.backgroundRefreshEnabled,
-            backgroundScanStuck: s.backgroundScanStuck,
-            changes: s.settingsChanges,
-            restaurantAssist: s.restaurantAssist,
-            cloudBackup: s.cloudBackup,
-            androidBackupNote: Platform.isAndroid,
-            onImported: () {
-              s.thumbs?.clear();
-              signalMealsChanged();
-            },
-          ),
-        ]),
+              cloudBackup: s.cloudBackup,
+              androidBackupNote: Platform.isAndroid,
+              onImported: () {
+                s.thumbs?.clear();
+                signalMealsChanged();
+              },
+            ),
+          ]),
+        ),
       ),
       // The + 记录 button is a REAL Scaffold FAB (Today tab only — Body has
       // its own), so Material lifts it above this messenger's snackbars.

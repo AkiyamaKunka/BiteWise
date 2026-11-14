@@ -502,8 +502,49 @@ class GroupedToggleRow extends StatelessWidget {
   }
 }
 
+/// From this window width the content is capped ([ContentWidthCap]).
+const double kWideLayoutMinWidth = 600;
+
+/// The content column's width on a wide window.
+const double kContentMaxWidth = 640;
+
+/// Large screens (Android push, 2026-11-13): for targetSdk 36, Android 16
+/// ignores orientation and resizability limits at 600 dp and wider, so
+/// tablets, foldables and Chromebooks get the app whatever the manifest
+/// says, and an 800 dp window stretched every card edge to edge (UX run
+/// screenshot 62). From [kWideLayoutMinWidth] [child] is a centred column
+/// at most [kContentMaxWidth] wide; below it, the full width as before.
+/// The side insets are kept clear too: in landscape with 3-button
+/// navigation the cards ran under the side bar (screenshot 73). The page
+/// colour shows on either side (it is every scaffold's background).
+///
+/// The same widgets at every width, so crossing the breakpoint (unfolding,
+/// a resized window) keeps [child]'s state.
+class ContentWidthCap extends StatelessWidget {
+  const ContentWidthCap({super.key, required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= kWideLayoutMinWidth;
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxWidth: wide ? kContentMaxWidth : double.infinity),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
 /// Scaffold for a grouped subpage (the disclosure targets): grouped
-/// background + iOS-style large-title collapsing header.
+/// background + iOS-style large-title collapsing header. On a wide window
+/// the page is a centred column ([ContentWidthCap]).
 class GroupedPage extends StatelessWidget {
   const GroupedPage({super.key, required this.title, required this.children});
   final String title;
@@ -513,18 +554,20 @@ class GroupedPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: pageColor(context),
-      body: CustomScrollView(
-        physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics()),
-        slivers: [
-          appLargeTitleBar(context, title: title),
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [...children, const SizedBox(height: 32)],
+      body: ContentWidthCap(
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics()),
+          slivers: [
+            appLargeTitleBar(context, title: title),
+            SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [...children, const SizedBox(height: 32)],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
