@@ -3299,4 +3299,18 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get watcherLimitedFooterIos =>
       '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
+
+  @override
+  String get addChooseAllPhotos => '从所有照片中选择…';
+
+  @override
+  String get addPickerNote => 'Android 的照片选择器会显示你的所有照片，筷拍只会收到你选中的那一张。';
+
+  @override
+  String get addPickerUnavailable => '这台手机上无法打开照片选择器。你仍然可以在相册应用里把照片分享给筷拍。';
+
+  @override
+  String addOldPhotoLoggedToday(String taken, int days) {
+    return '这张照片拍摄于 $taken，已超过 $days 天，所以这餐记在了今天。如需记到拍摄当天，请打开这餐修改日期。';
+  }
 }

@@ -3669,4 +3669,20 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get watcherLimitedFooterIos =>
       'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
+
+  @override
+  String get addChooseAllPhotos => 'Choose from all photos…';
+
+  @override
+  String get addPickerNote =>
+      'Android\'s photo picker shows all your photos. Chopstats receives only the one you choose.';
+
+  @override
+  String get addPickerUnavailable =>
+      'The photo picker can\'t open on this phone. You can still share a photo to Chopstats from your gallery app.';
+
+  @override
+  String addOldPhotoLoggedToday(String taken, int days) {
+    return 'This photo was taken on $taken, more than $days days ago, so its meal was logged for today. To log it on its own day, open the meal and change its date.';
+  }
 }

@@ -1,15 +1,24 @@
 // Deliberate intake (spec §6, §2.3): share-sheet stream + pickFromRecent,
 // all deliberate=true; §6.1 extension filter; §8 25 MB cap.
 import 'dart:async';
+import 'dart:convert' show base64Decode;
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/services/analyzer/normalize.dart'
+    show normalizeForAnalysis;
+import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
+    show looksLikeJpeg;
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/share_intake.dart';
+import 'package:calorie_tracker/ui/ai_consent.dart' show SharedPhotoConsentGate;
+import 'package:calorie_tracker/ui/photo_pipeline.dart' show PhotoPipeline;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
+import '../ui/fakes.dart' show FakeAnalyzer, FakeDao, FakeSettings;
 import 'watcher_test.dart' show FakeAsset, FakePhotoLibrary;
 
 class FakeShareSource implements SharedMediaSource {
@@ -301,14 +310,66 @@ void main() {
   });
 
   group('§6.1 extension filter', () {
-    test('accepts jpg/jpeg/png/heic/heif/tiff, rejects the rest', () {
+    // WebP and GIF: what Android browsers and chat apps share, and what
+    // MainActivity names a nameless image stream by its MIME type
+    // (IMG_<ts>.webp). The engine codec and the image package decode both;
+    // iOS ImageIO decodes WebP on iOS 14+ (the app's floor is 15). AVIF
+    // stays out: its decoding is unverified on either platform.
+    test('accepts jpg/jpeg/png/heic/heif/tiff/webp/gif, rejects the rest',
+        () {
       for (final name in [
-        'a.jpg', 'a.JPEG', 'a.png', 'a.heic', 'a.HEIF', 'a.tiff'
+        'a.jpg', 'a.JPEG', 'a.png', 'a.heic', 'a.HEIF', 'a.tiff', //
+        'a.webp', 'IMG_1731500000000.WEBP', 'a.gif', 'a.GIF',
       ]) {
         expect(hasSupportedPhotoExtension(name), isTrue, reason: name);
       }
-      for (final name in ['a.gif', 'a.mp4', 'a.txt', 'noext', 'a.']) {
+      for (final name in [
+        'a.avif', 'a.mp4', 'a.txt', 'noext', 'a.', 'a.webp.txt', 'a.gifv'
+      ]) {
         expect(hasSupportedPhotoExtension(name), isFalse, reason: name);
+      }
+    });
+
+    test('a shared WebP and a shared GIF reach the pipeline; an AVIF is '
+        'still dropped and its copy deleted', () async {
+      final source = FakeShareSource();
+      final intake = build(source, FakePhotoLibrary());
+      files['/shared/IMG_1731500000000.webp'] = Uint8List.fromList([1]);
+      files['/shared/lunch.gif'] = Uint8List.fromList([2]);
+      files['/shared/scan.avif'] = Uint8List.fromList([3]);
+      final emitted = <IntakePhoto>[];
+      final sub = intake.photos().listen(emitted.add);
+      source.controller.add([
+        '/shared/IMG_1731500000000.webp',
+        '/shared/lunch.gif',
+        '/shared/scan.avif',
+      ]);
+      await pumpEventQueue();
+      expect(emitted.map((p) => p.fileName),
+          ['IMG_1731500000000.webp', 'lunch.gif']);
+      expect(emitted.every((p) => p.deliberate), isTrue);
+      expect(cleaned, [
+        '/shared/IMG_1731500000000.webp',
+        '/shared/lunch.gif',
+        '/shared/scan.avif',
+      ]);
+      await sub.cancel();
+    });
+
+    // An accepted type the upload chain cannot decode would fail every
+    // share of it: the last resort (pure Dart, normalize.dart) reads both
+    // and sends a JPEG, as every provider path labels it.
+    test('the pure-Dart decoder turns a WebP and a GIF into the upload JPEG',
+        () {
+      // A 1x1 lossless WebP.
+      final webp = base64Decode(
+          'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==');
+      final gif = img.encodeGif(
+          img.Image(width: 8, height: 8)..clear(img.ColorRgb8(200, 30, 30)));
+      for (final (name, bytes) in [('webp', webp), ('gif', gif)]) {
+        final upload = normalizeForAnalysis(bytes);
+        expect(upload, isNotNull, reason: name);
+        expect(looksLikeJpeg(upload!), isTrue, reason: name);
       }
     });
   });
@@ -377,6 +438,343 @@ void main() {
           await build(FakeShareSource(), library).pickFromRecent(1);
       expect(picked.single.capture!.createDate, created);
       expect(picked.single.capture!.device, CaptureDevice.unknown);
+    });
+  });
+
+  // Review 171, C2: a 40-photo SEND_MULTIPLE was read whole before the
+  // first photo's analysis ended — every original in the stream's buffer
+  // at once (about 160 MB), while the pipeline processes one at a time.
+  // The share stream now honours pause, and bindStream pauses it until
+  // each photo's turn has ended: one original resident, plus at most one
+  // read ahead.
+  group('backpressure (C2): one shared original in memory at a time', () {
+    late Map<String, Uint8List> held;
+    late List<String> reads;
+
+    // Android's intake: copies in the share folder, each with a path of
+    // its own, may wait there for their turn.
+    ShareIntake counting(FakeShareSource source) => ShareIntake(
+        source: source,
+        library: FakePhotoLibrary(),
+        readBytes: (path) async {
+          reads.add(path);
+          return held[path];
+        },
+        cleanup: (path) async => cleaned.add(path),
+        sharedFolder: () async => '/shared',
+        clock: () => now);
+
+    List<String> share(int n, {String prefix = 'IMG'}) => [
+          for (var i = 0; i < n; i++)
+            '/shared/${prefix}_$i.jpg',
+        ]..forEach((p) => held[p] = Uint8List.fromList([p.hashCode & 0xFF, 1]));
+
+    setUp(() {
+      held = {};
+      reads = [];
+    });
+
+    test('a paused listener stops the reading; resume reads on, in order',
+        () async {
+      final source = FakeShareSource();
+      final paths = share(20);
+      final emitted = <String>[];
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((p) {
+        emitted.add(p.fileName);
+        sub.pause();
+      });
+      source.controller.add(paths);
+      await pumpEventQueue();
+      expect(emitted, hasLength(1));
+      expect(reads.length, lessThanOrEqualTo(2),
+          reason: 'one handed on, at most one read ahead');
+      sub.resume();
+      await pumpEventQueue();
+      expect(emitted, hasLength(2));
+      expect(reads.length, lessThanOrEqualTo(3));
+      // Keep going without pausing: everything arrives, in order.
+      sub.onData((p) => emitted.add(p.fileName));
+      sub.resume();
+      await pumpEventQueue();
+      expect(emitted, [for (final p in paths) fileBaseName(p)]);
+      expect(cleaned, paths, reason: 'every copy still deleted once read');
+      await sub.cancel();
+    });
+
+    test('a batch shared while one is still read waits its turn: the order '
+        'is kept and only one reader runs', () async {
+      final source = FakeShareSource();
+      final first = share(3, prefix: 'A');
+      final second = share(3, prefix: 'B');
+      final emitted = <String>[];
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((p) {
+        emitted.add(p.fileName);
+        sub.pause();
+      });
+      source.controller
+        ..add(first)
+        ..add(second);
+      await pumpEventQueue();
+      expect(reads.length, lessThanOrEqualTo(2),
+          reason: 'not one reader per batch');
+      for (var i = 0; i < 6; i++) {
+        sub.resume();
+        await pumpEventQueue();
+      }
+      expect(emitted, [for (final p in [...first, ...second]) fileBaseName(p)]);
+      await sub.cancel();
+    });
+
+    test('a live share is listened for while the launch share is still '
+        'held (the plugin drops a share nobody listens for)', () async {
+      final source = FakeShareSource()..initial = share(5, prefix: 'L');
+      var listened = false;
+      source.controller.onListen = () => listened = true;
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((_) => sub.pause());
+      await pumpEventQueue();
+      expect(listened, isTrue);
+      await sub.cancel();
+    });
+
+    test('a copy whose reading throws is skipped, and the shares after it '
+        'still arrive', () async {
+      final source = FakeShareSource();
+      final paths = share(3);
+      final intake = ShareIntake(
+          source: source,
+          library: FakePhotoLibrary(),
+          readBytes: (path) async {
+            reads.add(path);
+            if (path == paths[1]) throw const FileSystemException('gone');
+            return held[path];
+          },
+          cleanup: (path) async => cleaned.add(path),
+          sharedFolder: () async => '/shared',
+          clock: () => now);
+      final emitted = <String>[];
+      final sub = intake.photos().listen((p) => emitted.add(p.fileName));
+      source.controller.add(paths);
+      await pumpEventQueue();
+      final later = share(1, prefix: 'later');
+      source.controller.add(later);
+      await pumpEventQueue();
+      expect(emitted,
+          [fileBaseName(paths[0]), fileBaseName(paths[2]), 'later_0.jpg']);
+      expect(cleaned, [...paths, ...later]);
+      await sub.cancel();
+    });
+
+    test('iOS (no share folder) reads each copy as it arrives, paused or '
+        'not: its extension reuses file names', () async {
+      final source = FakeShareSource();
+      final paths = share(4);
+      final intake = ShareIntake(
+          source: source,
+          library: FakePhotoLibrary(),
+          readBytes: (path) async {
+            reads.add(path);
+            return held[path];
+          },
+          cleanup: (path) async => cleaned.add(path),
+          clock: () => now);
+      final emitted = <String>[];
+      late StreamSubscription<IntakePhoto> sub;
+      sub = intake.photos().listen((p) {
+        emitted.add(p.fileName);
+        sub.pause();
+      });
+      source.controller.add(paths);
+      await pumpEventQueue();
+      expect(reads, paths);
+      expect(cleaned, paths);
+      expect(emitted, hasLength(1), reason: 'the rest are buffered');
+      sub.resume();
+      await pumpEventQueue();
+      await sub.cancel();
+    });
+
+    test('cancelled while paused: the unread copies are deleted unread',
+        () async {
+      final source = FakeShareSource();
+      final paths = share(6);
+      late StreamSubscription<IntakePhoto> sub;
+      sub = counting(source).photos().listen((_) => sub.pause());
+      source.controller.add(paths);
+      await pumpEventQueue();
+      final readBefore = reads.length;
+      await sub.cancel();
+      await pumpEventQueue();
+      expect(reads.length, readBefore, reason: 'nothing more is read');
+      expect(cleaned.toSet(), paths.toSet(),
+          reason: 'no copy left behind in the cache');
+    });
+
+    test('a 20-photo share through the consent gate and the pipeline, the '
+        'first analysis held: at most 2 originals are read', () async {
+      final source = FakeShareSource();
+      final paths = share(20);
+      final release = Completer<void>();
+      var analyses = 0;
+      final analyzer = FakeAnalyzer()
+        ..onAnalyze = () async {
+          analyses++;
+          if (analyses == 1) await release.future;
+        };
+      final pipeline = PhotoPipeline(
+          dao: FakeDao(),
+          analyzer: analyzer,
+          hasher: (b) async => 'h${b[0]}-${b.length}',
+          thumbnailer: (_) async => null);
+      pipeline.bindStream(SharedPhotoConsentGate(FakeSettings())
+          .gate(counting(source).photos()));
+      source.controller.add(paths);
+      await pumpEventQueue(times: 50);
+
+      expect(analyses, 1);
+      expect(reads.length, lessThanOrEqualTo(2),
+          reason: 'the stream buffered every original while photo 1 was '
+              'analyzed');
+
+      release.complete();
+      await pumpEventQueue(times: 400);
+      expect(reads, paths, reason: 'all read in the end, in order');
+      expect(analyses, 20);
+      expect(cleaned, paths);
+      await pipeline.dispose();
+    });
+  });
+
+  // Review 2026-11-13: with the C2 backpressure, copies wait in the share
+  // folder for minutes. An app killed mid-batch left the rest there for
+  // good — full-size originals in the cache, never logged, nothing said
+  // (MainActivity removes only EMPTY folders, and a recreated activity
+  // does not hand the launch share over again). The next start logs the
+  // ones shared within a day, through the same consent gate and pipeline:
+  // a copy still on disk was never read, since reading deletes it, so
+  // nothing is sent twice. Older ones are deleted unread.
+  group('Android: copies a killed app left unread', () {
+    late Directory cache;
+    late String folder;
+
+    setUp(() {
+      cache = Directory.systemTemp.createTempSync('share_stranded_');
+      folder = '${cache.path}/$androidShareFolderName';
+      Directory(folder).createSync(recursive: true);
+    });
+    tearDown(() => cache.deleteSync(recursive: true));
+
+    File copyAt(String id, String name, Duration age) =>
+        File('$folder/$id/$name')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(name.codeUnits)
+          ..setLastModifiedSync(now.subtract(age));
+
+    ShareIntake android(FakeShareSource source, List<String> read) =>
+        ShareIntake(
+            source: source,
+            library: FakePhotoLibrary(),
+            readBytes: (path) async {
+              read.add(path);
+              try {
+                return await File(path).readAsBytes();
+              } catch (_) {
+                return null;
+              }
+            },
+            // The production cleanup: a real delete.
+            sharedFolder: () async => folder,
+            clock: () => now);
+
+    test('are logged at the next start, oldest first, after the launch '
+        'share', () async {
+      final a = copyAt('u1', 'IMG_a.jpg', const Duration(hours: 2));
+      final b = copyAt('u2', 'IMG_b.jpg', const Duration(hours: 1));
+      final launch = copyAt('u3', 'IMG_c.jpg', Duration.zero);
+      final source = FakeShareSource()..initial = [launch.path];
+      final read = <String>[];
+      final emitted = <String>[];
+      final sub = android(source, read)
+          .photos()
+          .listen((p) => emitted.add(p.fileName));
+      await pumpEventQueue(times: 50);
+      expect(emitted, ['IMG_c.jpg', 'IMG_a.jpg', 'IMG_b.jpg']);
+      expect(emitted.length, 3, reason: 'the launch share once, not twice');
+      for (final f in [a, b, launch]) {
+        expect(f.existsSync(), isFalse, reason: f.path);
+      }
+      await sub.cancel();
+    });
+
+    test('older than a day: deleted unread', () async {
+      final old = copyAt('u1', 'IMG_old.jpg', const Duration(hours: 25));
+      final read = <String>[];
+      final emitted = <IntakePhoto>[];
+      final sub = android(FakeShareSource(), read).photos().listen(emitted.add);
+      await pumpEventQueue(times: 50);
+      expect(emitted, isEmpty);
+      expect(read, isEmpty, reason: 'never read, never sent');
+      expect(old.existsSync(), isFalse);
+      await sub.cancel();
+    });
+
+    test('a copy written seconds ago is left to its own share', () async {
+      final fresh = copyAt('u1', 'IMG_new.jpg', const Duration(seconds: 2));
+      final read = <String>[];
+      final sub = android(FakeShareSource(), read).photos().listen((_) {});
+      await pumpEventQueue(times: 50);
+      expect(read, isEmpty,
+          reason: 'it may still be being copied; its event delivers it');
+      expect(fresh.existsSync(), isTrue);
+      await sub.cancel();
+    });
+
+    test('a copy both left over and in a live share is logged once',
+        () async {
+      final c = copyAt('u1', 'IMG_x.jpg', const Duration(minutes: 5));
+      final source = FakeShareSource();
+      final read = <String>[];
+      final emitted = <String>[];
+      final sub = android(source, read)
+          .photos()
+          .listen((p) => emitted.add(p.fileName));
+      source.controller.add([c.path]);
+      await pumpEventQueue(times: 50);
+      expect(emitted, ['IMG_x.jpg']);
+      await sub.cancel();
+    });
+
+    test('only files inside the share folder are touched', () async {
+      final private = File('${cache.path}/private.jpg')
+        ..writeAsBytesSync([1])
+        ..setLastModifiedSync(now.subtract(const Duration(days: 3)));
+      final read = <String>[];
+      final sub = android(FakeShareSource(), read).photos().listen((_) {});
+      await pumpEventQueue(times: 50);
+      expect(read, isEmpty);
+      expect(private.existsSync(), isTrue);
+      await sub.cancel();
+    });
+
+    test('iOS (no share folder) sweeps nothing', () async {
+      final left = copyAt('u1', 'IMG_a.jpg', const Duration(hours: 1));
+      final read = <String>[];
+      final sub = ShareIntake(
+              source: FakeShareSource(),
+              library: FakePhotoLibrary(),
+              readBytes: (p) async {
+                read.add(p);
+                return null;
+              },
+              clock: () => now)
+          .photos()
+          .listen((_) {});
+      await pumpEventQueue(times: 50);
+      expect(read, isEmpty);
+      expect(left.existsSync(), isTrue);
+      await sub.cancel();
     });
   });
 }

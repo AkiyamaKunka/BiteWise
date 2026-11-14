@@ -5,6 +5,11 @@
         <!-- Show a splash screen on the activity. Automatically removed when
              the Flutter engine draws its first frame -->
         <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- Android 7-11 (API 24-30): launch_background (drawable-v21)
+             paints ?android:colorBackground, which Theme.Light makes white.
+             The app's light page colour instead (AppColors.light.page,
+             lib/ui/theme/tokens.dart), as values-v31 gives Android 12+. -->
+        <item name="android:colorBackground">#FFF2F2F7</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
          This theme determines the color of the Android Window while your

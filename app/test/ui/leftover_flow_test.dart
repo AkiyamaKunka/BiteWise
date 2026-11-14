@@ -11,6 +11,7 @@ import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
+import 'package:calorie_tracker/services/photo/system_photo_picker.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
@@ -24,6 +25,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'add_flow_system_picker_test.dart' show FakeSystemPicker;
 import 'fakes.dart';
 
 final _photoBytes = Uint8List.fromList([9, 9, 9, 9]);
@@ -61,6 +63,17 @@ class _UnreadablePicker extends FakePicker {
   Future<IntakePhoto?> loadOriginal(RecentAsset asset) async {
     loadedOriginals.add(asset.id);
     return null;
+  }
+}
+
+/// A grid source that counts listings: in production the listing itself
+/// asks for library access (di.dart _ShareIntakePicker.recentAssets).
+class _ListingPicker extends FakePicker {
+  int listings = 0;
+  @override
+  Future<List<RecentAsset>> recentAssets({int limit = 30}) {
+    listings++;
+    return super.recentAssets(limit: limit);
   }
 }
 
@@ -871,6 +884,230 @@ void main() {
       expect(find.byKey(const Key('leftoverMeal-1')), findsOneWidget,
           reason: 'once it is done, Change works again');
       expect(registry.isInUse(2), isFalse);
+    });
+  });
+
+  // Google Play's photo policy (2026-11): the Play build declares no photo
+  // permission at all, so on Android the photo step is the system Photo
+  // Picker — after the AI consent, never a library request, never the
+  // "isn't allowed" dead end. With full access the grid stays, plus a row
+  // that opens the picker.
+  group('Android: the system Photo Picker', () {
+    late _ListingPicker listing;
+    late int permissionRequests;
+
+    setUp(() {
+      listing = _ListingPicker()
+        ..photos = [IntakePhoto(_photoBytes, 'lp1', 'IMG_L.jpg')];
+      permissionRequests = 0;
+    });
+
+    SystemPick picked() => SystemPick(SystemPickStatus.ok, photos: [
+          IntakePhoto(_photoBytes, '', 'PXL_20261113_124500000.jpg',
+              deliberate: true)
+        ]);
+
+    Future<void> pumpPicker(WidgetTester tester, FakeSystemPicker system,
+        {FakeSettings? settings}) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+          home: LeftoverScreen(
+              systemPicker: system,
+              services: UiServices(
+                dao: dao,
+                analyzer: analyzer,
+                executor: FakeExecutor(),
+                settings: settings ?? FakeSettings(),
+                picker: listing,
+                requestPhotoPermission: () async {
+                  permissionRequests++;
+                  return false; // the Play build: nothing to grant
+                },
+                openSystemSettings: () async {},
+              ))));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> chooseMeal(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('leftoverMeal-1')));
+      await tester.pumpAndSettle();
+    }
+
+    void expectNoLibraryAsked() {
+      expect(permissionRequests, 0, reason: 'services.requestPhotoPermission');
+      expect(listing.listings, 0,
+          reason: 'the grid listing asks for access in production');
+      expect(find.byKey(const Key('leftoverPhotoPermissionDenied')),
+          findsNothing);
+    }
+
+    testWidgets('with no photo permission at all the deduction works end to '
+        'end: the meal opens the picker, and the picked photo is ledgered',
+        (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker(replies: [picked()]);
+      await pumpPicker(tester, system);
+      await chooseMeal(tester);
+
+      expect(system.picks, [1], reason: 'one photo, at once');
+      expectNoLibraryAsked();
+      expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+      expect(dao.meals.singleWhere((m) => m.id == 1).analysis['total_calories'],
+          665);
+      expect(dao.ledger[_photoMd5], IngestionStatus.skipped,
+          reason: 'the picked photo is known by its md5 like a grid photo: '
+              'the watcher must never log it as food');
+    });
+
+    testWidgets('the AI consent comes before the picker; Not now opens '
+        'nothing, and the button asks again', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final settings = FakeSettings()..aiConsent = {};
+      final system = FakeSystemPicker(replies: [picked()]);
+      await pumpPicker(tester, system, settings: settings);
+      await chooseMeal(tester);
+      expect(find.byKey(const Key('aiConsentDialog')), findsOneWidget);
+      expect(system.picks, isEmpty);
+      await tester.tap(find.byKey(const Key('aiConsentNotNow')));
+      await tester.pumpAndSettle();
+      expect(system.picks, isEmpty);
+      expect(analyzer.lastLeftoverCompact, isNull);
+
+      await tester.tap(find.byKey(const Key('leftoverChooseAllPhotos')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('aiConsentAllow')));
+      await tester.pumpAndSettle();
+      expect(system.picks, [1]);
+      expect(analyzer.lastLeftoverCompact, isNotNull);
+      expectNoLibraryAsked();
+    });
+
+    testWidgets('without a key nothing is picked: it says why', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker(replies: [picked()]);
+      await pumpPicker(tester, system, settings: FakeSettings(apiKey: ''));
+      await chooseMeal(tester);
+      expect(system.picks, isEmpty);
+      expect(find.text(AppLocalizationsEn().errNoApiKey), findsOneWidget);
+    });
+
+    testWidgets('a cancelled pick keeps the photo step; the button and a '
+        'newly chosen meal open the picker again', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker(); // every pick cancelled
+      await pumpPicker(tester, system);
+      await chooseMeal(tester);
+      expect(system.picks, [1]);
+      expect(find.byKey(const Key('leftoverChosenMeal')), findsOneWidget);
+      expect(find.byKey(const Key('leftoverPickerNote')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('leftoverChooseAllPhotos')));
+      await tester.pumpAndSettle();
+      expect(system.picks, [1, 1]);
+
+      await tester.tap(find.byKey(const Key('leftoverChangeMeal')));
+      await tester.pumpAndSettle();
+      await chooseMeal(tester);
+      expect(system.picks, [1, 1, 1]);
+      expect(analyzer.lastLeftoverCompact, isNull);
+      expectNoLibraryAsked();
+    });
+
+    testWidgets('an unreadable pick says so; a picker that cannot open says '
+        'that, never "isn\'t allowed"', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker(replies: [
+        const SystemPick(SystemPickStatus.ok, tooBig: 1),
+        const SystemPick(SystemPickStatus.unavailable),
+      ]);
+      await pumpPicker(tester, system);
+      await chooseMeal(tester);
+      expect(find.text(AppLocalizationsEn().addPhotoUnreadable),
+          findsOneWidget);
+      await tester.tap(find.byKey(const Key('leftoverChooseAllPhotos')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('leftoverPickerUnavailable')),
+          findsOneWidget);
+      expect(analyzer.lastLeftoverCompact, isNull);
+      expectNoLibraryAsked();
+    });
+
+    testWidgets('with full access: the grid as before, plus the row',
+        (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker(broad: true, replies: [picked()]);
+      await pumpPicker(tester, system);
+      await chooseMeal(tester);
+      expect(system.picks, isEmpty, reason: 'the grid first');
+      expect(permissionRequests, 0, reason: 'full access is read, not asked');
+      expect(find.byKey(const Key('leftoverPhoto-lp1')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('leftoverChooseAllPhotos')));
+      await tester.pumpAndSettle();
+      expect(system.picks, [1]);
+      expect(listing.loadedOriginals, isEmpty,
+          reason: 'the picked photo, not a grid photo');
+      expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget);
+    });
+
+    testWidgets('at AX5 on a 320 pt phone the picker step fits and its '
+        'button is reachable', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker();
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: const TextScaler.linear(53 / 17)),
+          child: child!,
+        ),
+        home: LeftoverScreen(
+            systemPicker: system,
+            services: UiServices(
+              dao: dao,
+              analyzer: analyzer,
+              executor: FakeExecutor(),
+              settings: FakeSettings(),
+              picker: listing,
+              requestPhotoPermission: () async => false,
+            )),
+      ));
+      await tester.pumpAndSettle();
+      final meal = find.byKey(const Key('leftoverMeal-1'));
+      await tester.scrollUntilVisible(meal, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(meal);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(system.picks, [1]);
+      final button = find.byKey(const Key('leftoverChooseAllPhotos'));
+      await tester.scrollUntilVisible(button, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(system.picks, [1, 1]);
+    });
+
+    testWidgets('with full access, a picker that cannot open from the row '
+        'says so; the grid stays', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      final system = FakeSystemPicker(
+          broad: true,
+          replies: [const SystemPick(SystemPickStatus.unavailable)]);
+      await pumpPicker(tester, system);
+      await chooseMeal(tester);
+      await tester.tap(find.byKey(const Key('leftoverChooseAllPhotos')));
+      await tester.pumpAndSettle();
+      expect(find.text(AppLocalizationsEn().addPickerUnavailable),
+          findsOneWidget);
+      expect(find.byKey(const Key('leftoverPhoto-lp1')), findsOneWidget);
     });
   });
 }

@@ -5,6 +5,11 @@
         <!-- Show a splash screen on the activity. Automatically removed when
              the Flutter engine draws its first frame -->
         <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- Android 7-11 (API 24-30): the app's dark page colour
+             (AppColors.dark.page, lib/ui/theme/tokens.dart), as
+             values-night-v31 gives Android 12+. Theme.Black's own is black
+             already; stated so the two cannot drift. -->
+        <item name="android:colorBackground">#FF000000</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
          This theme determines the color of the Android Window while your
