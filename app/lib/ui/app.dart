@@ -14,6 +14,7 @@ import 'package:path_provider/path_provider.dart'
     show getApplicationDocumentsDirectory;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show SystemUiOverlayStyle;
 
 import '../services/backup/backup_coordinator.dart';
 import '../services/photo/background_time.dart' show appEngineInForeground;
@@ -46,6 +47,38 @@ class _AppleScrollBehavior extends MaterialScrollBehavior {
   Widget buildOverscrollIndicator(
           BuildContext context, Widget child, ScrollableDetails details) =>
       child;
+}
+
+/// Android's navigation bar styled for the theme the app SHOWS (Android
+/// push, 2026-11-13). MainActivity handles uiMode changes itself
+/// (AndroidManifest configChanges), so a light/dark switch while the app
+/// runs kept the launch theme's bar: with 3-button navigation, a light bar
+/// under the dark app and dark buttons on a dark bar after switching back
+/// (UX run screenshots 57-59). Only the navigation-bar fields are set; the
+/// status-bar ones stay null, so the app bars keep them. The bar is
+/// transparent over the app's own tab bar (edge to edge), with the
+/// system's contrast scrim off and the buttons in the theme's contrast.
+/// iPhone has no such bar: nothing is set there.
+class _SystemNavBarStyle extends StatelessWidget {
+  const _SystemNavBarStyle({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (theme.platform != TargetPlatform.android) return child;
+    final dark = theme.brightness == Brightness.dark;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarDividerColor: Colors.transparent,
+        systemNavigationBarIconBrightness:
+            dark ? Brightness.light : Brightness.dark,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: child,
+    );
+  }
 }
 
 class CalorieTrackerApp extends StatelessWidget {
@@ -92,6 +125,8 @@ class CalorieTrackerApp extends StatelessWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: const [Locale('en'), Locale('zh')],
+          builder: (context, child) =>
+              _SystemNavBarStyle(child: child ?? const SizedBox.shrink()),
           home: shell,
         );
     }
@@ -789,6 +824,8 @@ class _StartupErrorAppState extends State<StartupErrorApp>
       theme: AppTheme.build(Brightness.light, cjk: zh),
       darkTheme: AppTheme.build(Brightness.dark, cjk: zh),
       themeMode: ThemeMode.system,
+      builder: (context, child) =>
+          _SystemNavBarStyle(child: child ?? const SizedBox.shrink()),
       home: Builder(builder: (context) {
         final text = Theme.of(context).textTheme;
         final colors = context.colors;
