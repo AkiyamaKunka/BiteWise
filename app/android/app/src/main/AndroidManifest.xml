@@ -122,11 +122,12 @@
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             tools:node="remove"/>
-        <!-- The system Photo Picker (MainActivity.pickImages) on Android
-             4.4-10: asks Google Play services to install its backported
-             picker module. Disabled and not exported, a marker only; the
-             class lives in Play services. Without Play services the
-             AndroidX contract falls back to ACTION_OPEN_DOCUMENT itself.
+        <!-- The system Photo Picker (MainActivity.pickImages) on Android 10
+             and lower (7-10 here: minSdk is 24): asks Google Play services
+             to install its backported picker module. Disabled and not
+             exported, a marker only; the class lives in Play services.
+             Without Play services the AndroidX contract falls back to
+             ACTION_OPEN_DOCUMENT itself.
              (developer.android.com/training/data-storage/shared/photopicker) -->
         <service
             android:name="com.google.android.gms.metadata.ModuleDependencies"

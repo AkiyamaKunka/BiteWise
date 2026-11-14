@@ -931,7 +931,7 @@ void main() {
   // contracts by hand: createIntent, startActivityForResult, parseResult.
   // Copies go to cacheDir/picked_photos/<uuid>/<name>, under the share cap.
   // The ModuleDependencies entry asks Play services for the backported
-  // picker on Android 4.4-10; elsewhere the contract falls back to
+  // picker on Android 7-10 (minSdk 24); elsewhere the contract falls back to
   // ACTION_OPEN_DOCUMENT by itself.
   test('MainActivity serves pickImages through the system photo picker', () {
     final kotlin = _mainActivity();
