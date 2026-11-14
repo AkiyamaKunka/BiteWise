@@ -1401,6 +1401,39 @@ void main() {
     }
   });
 
+  // Android 7-11 (API 24-30) draw the launch window from LaunchTheme's
+  // colorBackground (launch_background in drawable-v21), which Theme.Light
+  // made white: a white flash before the grey first frame. Both launch
+  // themes take the app's page colours (lib/ui/theme/tokens.dart), as the
+  // Android 12+ splash themes do.
+  test('the API 24-30 launch window takes the app page colours', () {
+    final res = '${_appRoot().path}/android/app/src/main/res';
+    String launch(String folder) {
+      final xml = File('$res/$folder/styles.xml').readAsStringSync();
+      final style = RegExp(r'<style name="LaunchTheme"[^>]*>(.*?)</style>',
+              dotAll: true)
+          .firstMatch(_uncommented(xml))
+          ?.group(1);
+      expect(style, isNotNull, reason: folder);
+      expect(style,
+          contains('<item name="android:windowBackground">@drawable/'
+              'launch_background</item>'),
+          reason: folder);
+      return style!;
+    }
+
+    expect(launch('values'),
+        contains('<item name="android:colorBackground">#FFF2F2F7</item>'));
+    expect(launch('values-night'),
+        contains('<item name="android:colorBackground">#FF000000</item>'));
+    expect(File('$res/drawable-v21/launch_background.xml').readAsStringSync(),
+        contains('android:drawable="?android:colorBackground"'));
+    final tokens = File('${_appRoot().path}/lib/ui/theme/tokens.dart')
+        .readAsStringSync();
+    expect(tokens, contains('page: Color(0xFFF2F2F7)'));
+    expect(tokens, contains('page: Color(0xFF000000)'));
+  });
+
   // Owner decision 2026-11-13: the package stays, and the upload key the
   // GitHub APKs are signed with becomes Play's app-signing key. Both are
   // permanent once the first bundle is uploaded: a new package is a new
